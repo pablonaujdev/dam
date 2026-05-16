@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_website_page_transfer_wizard_form" model="ir.ui.view">
+        <field name="name">website.page.transfer.wizard.form</field>
+        <field name="model">website.page.transfer.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Website Page Export/Import">
+                <sheet>
+                    <group>
+                        <field name="website_id" options="{'no_create': True}"/>
+                    </group>
+                    <notebook>
+                        <page string="Export">
+                            <group>
+                                <field name="page_id" domain="['|', ('website_id', '=', False), ('website_id', '=', website_id)]"/>
+                                <field name="export_format"/>
+                            </group>
+                            <group>
+                                <button name="action_export_page" type="object" string="Generate Export File" class="btn-primary"/>
+                            </group>
+                            <group>
+                                <field name="export_filename" readonly="1" invisible="not export_file"/>
+                                <field name="export_file" filename="export_filename" readonly="1" invisible="not export_file"/>
+                            </group>
+                        </page>
+                        <page string="Import">
+                            <group>
+                                <field name="import_filename" invisible="1"/>
+                                <field name="import_file" filename="import_filename"/>
+                                <field name="target_page_id" domain="['|', ('website_id', '=', False), ('website_id', '=', website_id)]"/>
+                                <field name="overwrite_existing"/>
+                                <field name="create_if_missing"/>
+                            </group>
+                            <group>
+                                <button name="action_import_page" type="object" string="Import and Overwrite" class="btn-primary"/>
+                            </group>
+                        </page>
+                        <page string="Log">
+                            <group>
+                                <field name="log_message" readonly="1" nolabel="1"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_website_page_transfer_wizard" model="ir.actions.act_window">
+        <field name="name">Page Export/Import</field>
+        <field name="res_model">website.page.transfer.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem
+        id="menu_website_page_transfer_wizard"
+        name="Page Export/Import"
+        parent="website.menu_content"
+        action="action_website_page_transfer_wizard"
+        groups="website.group_website_designer"
+        sequence="80"/>
+
+</odoo>
+

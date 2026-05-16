@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Heredar la plantilla del reporte de liquidación de comisiones -->
+        <!-- Esta herencia se aplica después de account_commission que agrega Invoice line y Quantity -->
+        <!-- Odoo aplicará las herencias en orden, así que nuestras columnas se agregarán después de las de account_commission -->
+        <template id="report_settlement_document_jh" inherit_id="commission.report_settlement_document">
+            
+            <!-- Agregar nuevas columnas en el encabezado de la tabla -->
+            <!-- Agregar después de la última columna (puede ser Amount settled o Quantity si existe account_commission) -->
+            <xpath expr="//table[@name='invoice_line_table']//thead//tr//th[last()]" position="after">
+                <th class="text-start">Cliente</th>
+                <th class="text-start">Producto</th>
+                <th class="text-center">% Comisión</th>
+                <th class="text-start">N° Serie</th>
+                <th class="text-start">Forma Pago</th>
+                <th class="text-start">Condiciones Pago</th>
+            </xpath>
+            
+            <!-- Agregar las celdas de datos en cada fila de la tabla -->
+            <!-- Agregar después de la última celda de datos -->
+            <xpath expr="//table[@name='invoice_line_table']//tbody//tr//td[last()]" position="after">
+                <td class="text-start">
+                    <span t-esc="l.jh_invoice_id and l.jh_invoice_id.partner_id and l.jh_invoice_id.partner_id.name or ''"/>
+                </td>
+                <td class="text-start">
+                    <span t-esc="l.jh_product_id and l.jh_product_id.name or (l.invoice_line_id and l.invoice_line_id.product_id and l.invoice_line_id.product_id.name or '')"/>
+                </td>
+                <td class="text-center">
+                    <span t-esc="'%.2f' % (l.jh_commission_percent or 0.0)"/>%
+                </td>
+                <td class="text-start">
+                    <span t-esc="l.jh_serial_number or ''"/>
+                </td>
+                <td class="text-start">
+                    <span t-esc="l.jh_invoice_id and l.jh_invoice_id.payment_mode_id and l.jh_invoice_id.payment_mode_id.name or ''"/>
+                </td>
+                <td class="text-start">
+                    <span t-esc="l.jh_invoice_id and l.jh_invoice_id.invoice_payment_term_id and l.jh_invoice_id.invoice_payment_term_id.name or ''"/>
+                </td>
+            </xpath>
+            
+            <!-- Agregar celdas vacías en el footer para mantener el formato -->
+            <!-- Agregar después de la celda vacía inicial, antes de "Total" -->
+            <xpath expr="//table[@name='invoice_line_table']//tfoot//tr//td[1]" position="after">
+                <td/>
+                <td/>
+                <td/>
+                <td/>
+                <td/>
+                <td/>
+            </xpath>
+        </template>
+    </data>
+</odoo>

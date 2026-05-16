@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Heredar vista lista de órdenes de venta (suscripciones = sale.order con plan recurrente) -->
+    <record id="view_order_tree_jh_products" model="ir.ui.view">
+        <field name="name">sale.order.tree.jh.products</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale_subscription.sale_subscription_view_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='partner_id']" position="after">
+                <field name="jh_subscription_product_ids" string="Productos" widget="many2many_tags" optional="show"/>
+                <field name="jh_serial_number" optional="show"/>
+                <field name="end_date" optional="show"/>
+                <field name="partner_shipping_id" optional="show" widget="many2one"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

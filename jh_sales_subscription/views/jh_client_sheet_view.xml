@@ -1,0 +1,53 @@
+<odoo>
+    <!-- Pestaña Histórico de Ventas: heredar de base y añadir UNA página después de Internal Notes -->
+    <record id="view_partner_form_jh_sales_history" model="ir.ui.view">
+        <field name="name">res.partner.form.jh.sales.history</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='internal_notes']" position="after">
+                <page name="jh_sales_history" string="Histórico de Ventas">
+                    <field name="jh_client_sheet_ids" nolabel="1">
+                        <tree decoration-success="jh_amount_bruto &gt; 0" decoration-danger="jh_amount_bruto &lt; 0">
+                            <field name="jh_date"/>
+                            <field name="jh_account_move"/>
+                            <button name="action_invoice_pdf" type="object" string="PDF" class="btn-link" icon="fa-file-pdf-o" title="Ver factura en PDF"/>
+                            <field name="jh_product_id"/>
+                            <field name="jh_quantity_sold" sum="1"/>
+                            <field name="jh_amount_bruto" sum="1"/>
+                            <field name="jh_sale_lot_id"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Pestaña Histórico Manual: heredar de NUESTRA vista anterior para añadir la segunda página -->
+    <record id="view_partner_form_jh_manual_sheet" model="ir.ui.view">
+        <field name="name">res.partner.form.jh.manual.sheet</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="view_partner_form_jh_sales_history"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='jh_sales_history']" position="after">
+                <page name="jh_manual_sheet" string="Histórico Manual">
+                    <field name="jh_manual_sheet_ids" nolabel="1">
+                        <tree decoration-success="jh_amount_bruto &gt; 0" decoration-danger="jh_amount_bruto &lt; 0" create="1" delete="1" edit="1" editable="bottom">
+                            <field name="parent_id" column_invisible="1"/>
+                            <field name="commercial_partner_id" column_invisible="1"/>
+                            <field name="jh_date"/>
+                            <field name="jh_account_move"/>
+                            <button name="action_attach_invoice_pdf" type="object" string="Adjuntar PDF" class="btn-link" icon="fa-paperclip" title="Adjuntar PDF de factura"/>
+                            <button name="action_view_invoice_pdf" type="object" string="Ver PDF" class="btn-link" icon="fa-file-pdf-o" title="Ver PDF adjunto" invisible="not has_pdf_attachment"/>
+                            <field name="has_pdf_attachment" column_invisible="1"/>
+                            <field name="jh_product_id" options="{'no_create': True}"/>
+                            <field name="jh_quantity_sold" sum="1"/>
+                            <field name="jh_amount_bruto" sum="1"/>
+                            <field name="jh_sale_lot_id"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <record id="view_jh_sales_subscription_advice_form" model="ir.ui.view">
+            <field name="name">jh.sales.subscription.advice.form</field>
+            <field name="model">jh.sales.subscription.advice</field>
+            <field name="arch" type="xml">
+                <form string="Usuario para notificación de suscripciones">
+                    <sheet>
+                        <group>
+                            <field name="name"/>
+                            <field name="jh_email"/>
+                            <field name="jh_company_id"/>
+                            <field name="jh_notify_type"/>
+                            <field name="jh_active"/>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="view_jh_sales_subscription_advice_tree" model="ir.ui.view">
+            <field name="name">jh.sales.subscription.advice.tree</field>
+            <field name="model">jh.sales.subscription.advice</field>
+            <field name="arch" type="xml">
+                <tree string="Usuarios para notificación">
+                    <field name="name"/>
+                    <field name="jh_email"/>
+                    <field name="jh_company_id"/>
+                    <field name="jh_notify_type"/>
+                    <field name="jh_active"/>
+                </tree>
+            </field>
+        </record>
+
+        <record id="action_jh_sales_subscription_advice" model="ir.actions.act_window">
+            <field name="name">Usuarios para notificación</field>
+            <field name="res_model">jh.sales.subscription.advice</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+    </data>
+</odoo>

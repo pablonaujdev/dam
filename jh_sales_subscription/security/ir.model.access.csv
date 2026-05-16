@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_jh_sales_subscription_advice,jh.sales.subscription.advice,model_jh_sales_subscription_advice,,1,1,1,1
+access_jh_client_sheet,jh.client.sheet,model_jh_client_sheet,,1,1,1,1
+access_jh_client_sheet_manual,jh.client.sheet.manual,model_jh_client_sheet_manual,,1,1,1,1
+access_jh_invoice_report_wizard,jh.invoice.report.wizard,model_jh_invoice_report_wizard,,1,1,1,1
+access_jh_visit,jh.visit,model_jh_visit,,1,1,1,1

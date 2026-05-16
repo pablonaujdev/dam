@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Herencia de la vista de propiedades contables del contacto -->
+        <record id="res_partner_property_form_inherit_jh_taxes" model="ir.ui.view">
+            <field name="name">res.partner.property.form.inherit.jh.taxes</field>
+            <field name="model">res.partner</field>
+            <field name="inherit_id" ref="account.view_partner_property_form"/>
+            <field name="mode">extension</field>
+            <field name="priority">2</field>
+            <field name="arch" type="xml">
+
+                <xpath expr="//field[@name='property_account_position_id']" position="after">
+                    <field name="jh_taxes_id" widget="many2many_tags"/>
+                    <field name="jh_purchase_taxes_id" widget="many2many_tags"/>
+                </xpath>
+
+            </field>
+        </record>
+
+    </data>
+</odoo>

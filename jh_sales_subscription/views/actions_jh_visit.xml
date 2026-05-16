@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vista lista de visitas -->
+    <record id="view_jh_visit_tree" model="ir.ui.view">
+        <field name="name">jh.visit.tree</field>
+        <field name="model">jh.visit</field>
+        <field name="arch" type="xml">
+            <tree string="Visitas" create="1" delete="1" edit="1">
+                <field name="date"/>
+                <field name="commercial_id"/>
+                <field name="alert"/>
+                <field name="codigo_taller"/>
+                <field name="code"/>
+                <field name="partner_id"/>
+                <field name="observations"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Vista formulario de visitas -->
+    <record id="view_jh_visit_form" model="ir.ui.view">
+        <field name="name">jh.visit.form</field>
+        <field name="model">jh.visit</field>
+        <field name="arch" type="xml">
+            <form string="Visita">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="date"/>
+                            <field name="commercial_id"/>
+                            <field name="partner_id"/>
+                        </group>
+                        <group>
+                            <field name="alert"/>
+                            <field name="codigo_taller"/>
+                            <field name="code"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="observations" placeholder="Observaciones..." nolabel="1" colspan="2"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Acción para visitas -->
+    <record id="action_jh_visit" model="ir.actions.act_window">
+        <field name="name">Visitas</field>
+        <field name="res_model">jh.visit</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Crear primera visita
+            </p>
+            <p>
+                Registre las visitas realizadas a los clientes.
+            </p>
+        </field>
+    </record>
+
+    <!-- Heredar vista de contacto para agregar pestaña Visitas (depende de jh_client_sheet_view) -->
+    <record id="view_partner_form_jh_visits" model="ir.ui.view">
+        <field name="name">res.partner.form.jh.visits</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="jh_sales_subscription.view_partner_form_jh_manual_sheet"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='jh_manual_sheet']" position="after">
+                <page name="jh_visits" string="Visitas">
+                    <field name="jh_visit_ids" nolabel="1">
+                        <tree create="1" delete="0" edit="1" editable="bottom">
+                            <field name="date"/>
+                            <field name="commercial_id"/>
+                            <field name="alert"/>
+                            <field name="codigo_taller"/>
+                            <field name="code"/>
+                            <field name="observations"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

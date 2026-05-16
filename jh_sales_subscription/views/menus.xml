@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+    <!-- Menú dentro de Suscripciones > Configuración -->
+        <menuitem id="menu_jh_sales_subscription_advice"
+              name="Usuarios para notificación"
+              parent="sale_subscription.menu_sale_subscription_config"
+              action="action_jh_sales_subscription_advice"
+              sequence="100"/>
+    <!-- Menú reporte de lineas de facturas -->
+        <menuitem id="menu_invoice_report_export"
+                  name="Reporte de Lineas de Facturas"
+                  parent="account.account_reports_management_menu"
+                  action="action_invoice_report_wizard"
+                  sequence="100"/>
+    <!-- Menú Visitas en Contactos -->
+        <menuitem id="menu_jh_visit"
+                  name="Visitas"
+                  parent="contacts.menu_contacts"
+                  action="action_jh_visit"
+                  sequence="100"/>
+    </data>
+</odoo>

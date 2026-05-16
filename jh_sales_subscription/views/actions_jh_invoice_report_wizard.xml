@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vista del Wizard -->
+    <record id="view_invoice_report_wizard_form" model="ir.ui.view">
+        <field name="name">jh.invoice.report.wizard.form</field>
+        <field name="model">jh.invoice.report.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Exportar Reporte de Facturas">
+                <field name="state_wizard" invisible="1"/>
+
+                <group invisible="state_wizard == 'done'">
+                    <!-- Filtros de Fecha -->
+                    <group string="Período" col="2">
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                    </group>
+
+                    <!-- Filtros Adicionales -->
+                    <group string="Filtros" col="2">
+                        <field name="partner_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                        <field name="company_ids" widget="many2many_tags" groups="base.group_multi_company"/>
+                        <field name="product_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                        <field name="agents_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                        <field name="state"/>
+                        <field name="move_type"/>
+                    </group>
+
+                    <!-- Columnas a Exportar -->
+                    <group string="Columnas Básicas" col="4">
+                        <field name="show_move"/>
+                        <field name="show_partner"/>
+                        <field name="show_commercial_partner"/>
+                        <field name="show_invoice_date"/>
+                        <field name="show_invoice_date_due"/>
+                        <field name="show_product"/>
+                        <field name="show_product_categ"/>
+                        <field name="show_quantity"/>
+                        <field name="show_product_uom"/>
+                        <field name="show_price_average"/>
+                        <field name="show_price_subtotal"/>
+                        <field name="show_price_total"/>
+                    </group>
+
+                    <group string="Columnas Adicionales" col="4">
+                        <field name="show_partner_shipping"/>
+                        <field name="show_price_margin"/>
+                        <field name="show_currency"/>
+                        <field name="show_invoice_user"/>
+                        <field name="show_team"/>
+                        <field name="show_company"/>
+                        <field name="show_country"/>
+                        <field name="show_journal"/>
+                        <field name="show_payment_state"/>
+                        <field name="show_fiscal_position"/>
+                        <field name="show_account"/>
+                    </group>
+
+                    <group string="Campos Personalizados" col="4">
+                        <field name="show_jh_commission"/>
+                        <field name="show_jh_commission_percent"/>
+                        <field name="show_jh_margin_percent"/>
+                        <field name="show_jh_tax_amount"/>
+                        <field name="show_jh_cost"/>
+                        <field name="show_jh_agents"/>
+                        <field name="show_jh_serial_number"/>
+                        <field name="show_jh_payment_mode"/>
+                        <field name="show_jh_payment_term"/>
+                    </group>
+
+                    <!-- Formato de Exportación -->
+                    <group string="Formato" col="2">
+                        <field name="export_format" widget="radio"/>
+                    </group>
+                </group>
+
+                <!-- Resultado -->
+                <group invisible="state_wizard != 'done'">
+                    <group string="Reporte Generado" col="2">
+                        <field name="file_name" readonly="1"/>
+                        <field name="file_data" filename="file_name" readonly="1"/>
+                    </group>
+                </group>
+
+                <footer>
+                    <button string="Generar Reporte"
+                            name="action_generate_report"
+                            type="object"
+                            class="oe_highlight"
+                            invisible="state_wizard == 'done'"/>
+                    <button string="Volver"
+                            name="action_back"
+                            type="object"
+                            invisible="state_wizard != 'done'"/>
+                    <button string="Cerrar"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Acción del Wizard -->
+    <record id="action_invoice_report_wizard" model="ir.actions.act_window">
+        <field name="name">Exportar Reporte de Facturas</field>
+        <field name="res_model">jh.invoice.report.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="account.model_account_invoice_report"/>
+    </record>
+</odoo>

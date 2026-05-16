@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="custom_account_invoice_tree_inherit" model="ir.ui.view">
+            <field name="name">account.invoice.tree.inherit.jh</field>
+            <field name="model">account.move</field>
+            <field name="inherit_id" eval="1470"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='activity_ids']" position="after">
+                    <field name="jh_country_id"/>
+                    <field name="jh_state_id"/>
+                </xpath>
+            </field>
+        </record>
+
+        <record id="custom_account_invoice_search_inherit" model="ir.ui.view">
+            <field name="name">account.invoice.search.inherit.jh</field>
+            <field name="model">account.move</field>
+            <field name="inherit_id" ref="account.view_account_invoice_filter"/>
+            <field name="arch" type="xml">
+                <xpath expr="//filter[@name='status']" position="after">
+                    <filter string="País" name="group_by_jh_country" context="{'group_by':'jh_country_id'}"/>
+                    <filter string="Provincia" name="group_by_jh_state" context="{'group_by':'jh_state_id'}"/>
+                </xpath>
+            </field>
+        </record>
+
+        <record id="account_invoice_partner_shipping_id_inherit" model="ir.ui.view">
+            <field name="name">account.invoice.partner.shipping.id.inherit</field>
+            <field name="model">account.move</field>
+            <field name="inherit_id" ref="account.view_move_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='partner_shipping_id']" position="attributes">
+                    <attribute name="domain">
+                        [ '|',
+                            ('id', '=', partner_id),
+                            '|',
+                                '&amp;',
+                                    ('commercial_partner_id', '=', commercial_partner_id),
+                                    ('type', '=', 'invoice'),
+                                '&amp;',
+                                    ('commercial_partner_id', '=', commercial_partner_id),
+                                    ('type', '=', 'delivery')
+                        ]
+                    </attribute>
+                </xpath>
+            </field>
+        </record>
+        <record id="account_mail_partner_shipping_id_inherit" model="ir.ui.view">
+            <field name="name">account.mail.partner.shipping.id.inherit</field>
+            <field name="model">account.move.send</field>
+            <field name="inherit_id" ref="account.account_move_send_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='mail_partner_ids']" position="before">
+                    <field name="partner_id" invisible="1"/>
+                    <field name="commercial_partner_id" invisible="1"/>
+                </xpath>
+                <xpath expr="//field[@name='mail_partner_ids']" position="attributes">
+                    <attribute name="domain">
+                        [ '|',
+                            ('id', '=', partner_id),
+                            '|',
+                                '&amp;',
+                                    ('commercial_partner_id', '=', commercial_partner_id),
+                                    ('type', 'in', ['invoice','delivery']),
+                                '&amp;',
+                                    ('commercial_partner_id', '=', commercial_partner_id),
+                                    ('email', '!=', False)
+                        ]
+                    </attribute>
+                    <attribute name="widget">many2many_tags</attribute>
+                    <attribute name="options">{'no_open': True, 'no_create': True}</attribute>
+                </xpath>
+            </field>
+        </record>
+  </data>
+</odoo>
