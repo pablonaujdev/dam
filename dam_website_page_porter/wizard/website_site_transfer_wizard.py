@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 import logging
@@ -8,6 +9,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
+from odoo.modules.module import _get_manifest_cached
 
 _logger = logging.getLogger(__name__)
 IMPORT_WARNINGS_CONTEXT_KEY = "website_site_transfer_import_warnings"
@@ -171,7 +173,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         assets = self._export_assets(website)
         menus = self._export_menus(website)
         website_values = self._export_website_values(website)
-        attachments = self._export_attachments(website, views, menus, website_values, view_snapshots)
+        attachments = self._export_attachments(website, views, menus, website_values, view_snapshots, assets)
 
         return {
             "meta": {
@@ -409,9 +411,10 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             )
         return result
 
-    def _export_attachments(self, website, views_payload, menus_payload, website_values, view_snapshots=None):
+    def _export_attachments(self, website, views_payload, menus_payload, website_values, view_snapshots=None, assets_payload=None):
         Attachment = self.env["ir.attachment"].sudo().with_context(active_test=False)
         view_snapshots = view_snapshots or []
+        assets_payload = assets_payload or []
         view_ids = {view["source_id"] for view in views_payload if view.get("source_id")}
         for snapshot in view_snapshots:
             view_ids |= set(snapshot.get("source_view_ids") or [])
@@ -440,9 +443,27 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         if referenced_ids:
             attachments |= Attachment.search([("id", "in", list(referenced_ids))])
 
+        custom_asset_urls = self._extract_custom_asset_urls(assets_payload)
+        if custom_asset_urls:
+            attachments |= Attachment.search(
+                [
+                    ("url", "in", list(custom_asset_urls)),
+                    ("website_id", "in", (False, website.id)),
+                ]
+            )
+
         serialized = [self._serialize_attachment(att) for att in attachments]
         serialized.sort(key=lambda item: item["source_id"])
         return serialized
+
+    def _extract_custom_asset_urls(self, assets_payload):
+        custom_urls = set()
+        for asset_data in assets_payload:
+            for field_name in ("path", "target"):
+                value = asset_data.get(field_name)
+                if value and value.startswith("/_custom/"):
+                    custom_urls.add(value)
+        return custom_urls
 
     def _serialize_attachment(self, attachment):
         datas_value = attachment.datas if attachment.type == "binary" else False
@@ -487,7 +508,8 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         return payload
 
     def _import_payload(self, payload):
-        website = self.website_id.sudo()
+        self._install_payload_required_addons(payload)
+        website = self.env[self._name].browse(self.id).website_id.sudo()
         self._import_website_values(website, payload["website"])
         if payload.get("view_snapshots"):
             view_map = self._import_view_snapshots(website, payload.get("view_snapshots", []))
@@ -495,8 +517,9 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             view_map = self._import_views(website, payload.get("views", []))
         page_map = self._import_pages(website, payload.get("pages", []), view_map)
         menus_count = self._import_menus(website, payload.get("menus", []), page_map)
-        assets_count = self._import_assets(website, payload.get("assets", []))
         attachment_map, attachment_count = self._import_attachments(website, payload.get("attachments", []), view_map, page_map)
+        self._ensure_custom_asset_attachments(website, payload.get("assets", []))
+        assets_count = self._import_assets(website, payload.get("assets", []))
         self._remap_website_references(website, attachment_map)
         self._remap_view_references(view_map, attachment_map)
         self._remap_menu_references(website, attachment_map)
@@ -543,9 +566,23 @@ class WebsiteSiteTransferWizard(models.TransientModel):
 
         theme_module_name = values.get("theme_module")
         if theme_module_name:
-            theme = self.env["ir.module.module"].sudo().search([("name", "=", theme_module_name)], limit=1)
+            theme = self.env["ir.module.module"].sudo().search(
+                [("name", "=", theme_module_name), ("state", "=", "installed")],
+                limit=1,
+            )
             if theme:
                 write_vals["theme_id"] = theme.id
+            else:
+                self._add_import_warning(
+                    section="website_theme",
+                    item=theme_module_name,
+                    exc=ValidationError(
+                        _(
+                            "Theme addon '%(addon)s' is not installed in the target database.",
+                            addon=theme_module_name,
+                        )
+                    ),
+                )
 
         self._safe_write(
             website.with_context(website_id=website.id),
@@ -553,6 +590,68 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             section="website",
             item=website.name,
         )
+
+    def _install_payload_required_addons(self, payload):
+        addon_names = self._get_payload_required_addons(payload)
+        if not addon_names:
+            return
+
+        Module = self.env["ir.module.module"].sudo()
+        modules = Module.search([("name", "in", list(addon_names))])
+        missing_records = addon_names - set(modules.mapped("name"))
+        if missing_records:
+            Module.update_list()
+            modules = Module.search([("name", "in", list(addon_names))])
+
+        unavailable = []
+        to_install = Module
+        module_by_name = {module.name: module for module in modules}
+        for addon_name in sorted(addon_names):
+            module = module_by_name.get(addon_name)
+            if not _get_manifest_cached(addon_name):
+                unavailable.append("%s (not found in addons_path)" % addon_name)
+            elif not module:
+                unavailable.append("%s (not found in Apps list)" % addon_name)
+            elif module.state == "installed":
+                continue
+            elif module.state == "uninstallable":
+                unavailable.append("%s (uninstallable)" % addon_name)
+            else:
+                to_install |= module
+
+        if unavailable:
+            raise UserError(
+                _(
+                    "The export requires these addons, but Odoo cannot install them automatically:\n- %(addons)s\n\n"
+                    "Copy/install those addon folders on the target server addons_path, update the Apps list, "
+                    "and run this import again.",
+                    addons="\n- ".join(unavailable),
+                )
+            )
+
+        if not to_install:
+            return
+
+        install_names = ", ".join(sorted(to_install.mapped("name")))
+        self._add_import_warning(
+            section="addon_install",
+            item=install_names,
+            exc=ValidationError(_("Installing missing addons before importing website data.")),
+        )
+        to_install.button_immediate_install()
+
+    def _get_payload_required_addons(self, payload):
+        addon_names = set()
+        theme_module_name = (payload.get("website") or {}).get("theme_module")
+        if theme_module_name:
+            addon_names.add(theme_module_name)
+
+        for asset_data in payload.get("assets", []):
+            for field_name in ("path", "target"):
+                addon_name = self._extract_asset_addon(asset_data.get(field_name))
+                if addon_name and _get_manifest_cached(addon_name):
+                    addon_names.add(addon_name)
+        return addon_names
 
     def _import_view_snapshots(self, website, snapshots_payload):
         View = self.env["ir.ui.view"].sudo().with_context(active_test=False)
@@ -1010,6 +1109,23 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         imported_ids = []
         for asset_data in assets_payload:
             key = asset_data.get("key")
+            missing_addon = (
+                self._get_uninstalled_asset_addon(asset_data.get("path"))
+                or self._get_uninstalled_asset_addon(asset_data.get("target"))
+            )
+            if missing_addon:
+                self._add_import_warning(
+                    section="asset_skip",
+                    item=key or asset_data.get("name") or asset_data.get("path"),
+                    exc=ValidationError(
+                        _(
+                            "Skipped asset because addon '%(addon)s' is not installed in the target database.",
+                            addon=missing_addon,
+                        )
+                    ),
+                )
+                continue
+
             vals = {
                 "name": asset_data.get("name") or "Imported Asset",
                 "bundle": asset_data.get("bundle"),
@@ -1050,6 +1166,67 @@ class WebsiteSiteTransferWizard(models.TransientModel):
 
         return len(imported_ids)
 
+    def _ensure_custom_asset_attachments(self, website, assets_payload):
+        custom_urls = self._extract_custom_asset_urls(assets_payload)
+        if not custom_urls:
+            return
+
+        Attachment = self.env["ir.attachment"].sudo().with_context(active_test=False)
+        existing_urls = set(
+            Attachment.search(
+                [
+                    ("url", "in", list(custom_urls)),
+                    ("website_id", "in", (False, website.id)),
+                ]
+            ).mapped("url")
+        )
+        missing_urls = custom_urls - existing_urls
+        for custom_url in sorted(missing_urls):
+            mimetype = "text/javascript" if custom_url.endswith(".js") else "text/scss"
+            placeholder = b"\n"
+            self._safe_create(
+                Attachment,
+                {
+                    "name": custom_url.rsplit("/", 1)[-1],
+                    "type": "binary",
+                    "mimetype": mimetype,
+                    "public": True,
+                    "url": custom_url,
+                    "db_datas": placeholder,
+                    "file_size": len(placeholder),
+                    "checksum": hashlib.sha1(placeholder).hexdigest(),
+                    "website_id": website.id,
+                },
+                section="custom_asset_placeholder",
+                item=custom_url,
+            )
+
+    def _get_uninstalled_asset_addon(self, path):
+        addon = self._extract_asset_addon(path)
+        if not addon or not _get_manifest_cached(addon):
+            return False
+
+        installed = self.env["ir.module.module"].sudo().search_count(
+            [("name", "=", addon), ("state", "=", "installed")]
+        )
+        return False if installed else addon
+
+    def _extract_asset_addon(self, path):
+        if not path:
+            return False
+        value = path.strip()
+        if not value or "://" in value or value.startswith("//"):
+            return False
+        if "." in value and "/" not in value:
+            return False
+        parts = [part for part in value.replace("\\", "/").split("/") if part]
+        if not parts:
+            return False
+        addon = parts[0]
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", addon):
+            return False
+        return addon
+
     def _import_attachments(self, website, attachments_payload, view_map, page_map):
         if not self.overwrite_attachments:
             return {}, 0
@@ -1070,6 +1247,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                 "public": bool(att_data.get("public", True)),
                 "mimetype": att_data.get("mimetype") or False,
                 "key": att_data.get("key") or False,
+                "url": att_data.get("url") or False,
                 "website_id": website.id,
                 "res_field": att_data.get("res_field") or False,
             }
@@ -1096,7 +1274,19 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                 datas = att_data.get("datas")
                 if not datas:
                     continue
-                vals["datas"] = datas
+                try:
+                    raw_data = base64.b64decode(datas)
+                except Exception as exc:
+                    self._add_import_warning("attachment_decode", att_data.get("name"), str(exc))
+                    continue
+                vals.update(
+                    {
+                        "db_datas": raw_data,
+                        "file_size": len(raw_data),
+                        "checksum": hashlib.sha1(raw_data).hexdigest(),
+                        "store_fname": False,
+                    }
+                )
             else:
                 vals["url"] = att_data.get("url")
 
