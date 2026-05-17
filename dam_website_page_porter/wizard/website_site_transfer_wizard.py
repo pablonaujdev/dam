@@ -173,14 +173,15 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         assets = self._export_assets(website)
         menus = self._export_menus(website)
         website_values = self._export_website_values(website)
-        attachments = self._export_attachments(website, views, menus, website_values, view_snapshots, assets)
+        attachments = self._export_attachments(website, pages, views, menus, website_values, view_snapshots, assets)
 
         return {
             "meta": {
                 "tool": "dam_website_site_porter",
-                "format_version": 2,
+                "format_version": 3,
                 "view_import_strategy": "snapshot",
                 "exported_at": fields.Datetime.to_string(fields.Datetime.now()),
+                "export_lang": self._get_export_lang(website),
             },
             "website": website_values,
             "views": views,
@@ -227,6 +228,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             "favicon": _to_text(website.favicon),
             "social_default_image": _to_text(website.social_default_image),
             "theme_module": website.theme_id.name if website.theme_id else False,
+            "default_lang": website.default_lang_id.code if website.default_lang_id else False,
         }
 
     def _export_pages(self, website):
@@ -236,6 +238,8 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         )
         result = []
         for page in pages:
+            view = page.view_id.sudo().with_context(active_test=False)
+            view_lang = self._with_export_lang(view, website)
             result.append(
                 {
                     "source_id": page.id,
@@ -252,6 +256,20 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                     "header_text_color": page.header_text_color,
                     "header_visible": page.header_visible,
                     "footer_visible": page.footer_visible,
+                    "view_name": view.name,
+                    "view_type": view.type or "qweb",
+                    "view_priority": view.priority,
+                    "view_mode": view.mode,
+                    "view_active": view.active,
+                    "view_track": view.track,
+                    "view_visibility": view.visibility,
+                    "view_visibility_password": view.sudo().visibility_password,
+                    "view_website_meta_title": view_lang.website_meta_title,
+                    "view_website_meta_description": view_lang.website_meta_description,
+                    "view_website_meta_keywords": view_lang.website_meta_keywords,
+                    "view_website_meta_og_img": view_lang.website_meta_og_img,
+                    "view_seo_name": view_lang.seo_name,
+                    "view_arch_db": self._get_page_view_arch(view, website),
                 }
             )
         return result
@@ -263,6 +281,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         )
         result = []
         for view in views:
+            view_lang = self._with_export_lang(view, website)
             result.append(
                 {
                     "source_id": view.id,
@@ -275,13 +294,13 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                     "track": view.track,
                     "visibility": view.visibility,
                     "visibility_password": view.sudo().visibility_password,
-                    "website_meta_title": view.website_meta_title,
-                    "website_meta_description": view.website_meta_description,
-                    "website_meta_keywords": view.website_meta_keywords,
-                    "website_meta_og_img": view.website_meta_og_img,
-                    "seo_name": view.seo_name,
+                    "website_meta_title": view_lang.website_meta_title,
+                    "website_meta_description": view_lang.website_meta_description,
+                    "website_meta_keywords": view_lang.website_meta_keywords,
+                    "website_meta_og_img": view_lang.website_meta_og_img,
+                    "seo_name": view_lang.seo_name,
                     "inherit_key": view.inherit_id.key if view.inherit_id else False,
-                    "arch_db": view.with_context(lang=None).arch_db or "",
+                    "arch_db": self._with_export_lang(view, website).arch_db or "",
                 }
             )
         return result
@@ -310,19 +329,16 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             if not key or key in seen_keys:
                 continue
             try:
-                arch_db = view.with_context(
-                    website_id=website.id,
-                    lang=None,
-                    inherit_branding=False,
-                ).get_combined_arch()
+                arch_db = self._get_combined_view_arch(view, website)
             except Exception as exc:  # noqa: BLE001 - export should keep moving
                 _logger.warning(
                     "Website site porter could not snapshot view %s: %s",
                     key or view.id,
                     exc,
                 )
-                arch_db = view.with_context(lang=None).arch_db or ""
+                arch_db = self._with_export_lang(view, website).arch_db or ""
 
+            view_lang = self._with_export_lang(view, website)
             seen_keys.add(key)
             result.append(
                 {
@@ -336,15 +352,43 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                     "track": view.track,
                     "visibility": view.visibility,
                     "visibility_password": view.sudo().visibility_password,
-                    "website_meta_title": view.website_meta_title,
-                    "website_meta_description": view.website_meta_description,
-                    "website_meta_keywords": view.website_meta_keywords,
-                    "website_meta_og_img": view.website_meta_og_img,
-                    "seo_name": view.seo_name,
+                    "website_meta_title": view_lang.website_meta_title,
+                    "website_meta_description": view_lang.website_meta_description,
+                    "website_meta_keywords": view_lang.website_meta_keywords,
+                    "website_meta_og_img": view_lang.website_meta_og_img,
+                    "seo_name": view_lang.seo_name,
                     "arch_db": arch_db,
                 }
             )
         return result
+
+    def _get_export_lang(self, website):
+        return website.default_lang_id.code or self.env.lang or False
+
+    def _with_export_lang(self, record, website):
+        export_lang = self._get_export_lang(website)
+        return record.with_context(lang=export_lang) if export_lang else record
+
+    def _get_combined_view_arch(self, view, website):
+        context = {
+            "website_id": website.id,
+            "inherit_branding": False,
+        }
+        export_lang = self._get_export_lang(website)
+        if export_lang:
+            context["lang"] = export_lang
+        return view.with_context(**context).get_combined_arch()
+
+    def _get_page_view_arch(self, view, website):
+        try:
+            return self._get_combined_view_arch(view, website)
+        except Exception as exc:  # noqa: BLE001 - export should keep moving
+            _logger.warning(
+                "Website site porter could not export combined page view %s: %s",
+                view.key or view.id,
+                exc,
+            )
+            return self._with_export_lang(view, website).arch_db or ""
 
     def _get_snapshot_base_view(self, view):
         base = view
@@ -411,11 +455,22 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             )
         return result
 
-    def _export_attachments(self, website, views_payload, menus_payload, website_values, view_snapshots=None, assets_payload=None):
+    def _export_attachments(
+        self,
+        website,
+        pages_payload,
+        views_payload,
+        menus_payload,
+        website_values,
+        view_snapshots=None,
+        assets_payload=None,
+    ):
         Attachment = self.env["ir.attachment"].sudo().with_context(active_test=False)
+        pages_payload = pages_payload or []
         view_snapshots = view_snapshots or []
         assets_payload = assets_payload or []
         view_ids = {view["source_id"] for view in views_payload if view.get("source_id")}
+        view_ids |= {page["view_source_id"] for page in pages_payload if page.get("view_source_id")}
         for snapshot in view_snapshots:
             view_ids |= set(snapshot.get("source_view_ids") or [])
         attachments = Attachment.search([("website_id", "=", website.id)])
@@ -428,6 +483,10 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         for view in views_payload:
             referenced_ids |= self._extract_attachment_ids(
                 "%s %s" % ((view.get("arch_db") or ""), (view.get("website_meta_og_img") or ""))
+            )
+        for page in pages_payload:
+            referenced_ids |= self._extract_attachment_ids(
+                "%s %s" % ((page.get("view_arch_db") or ""), (page.get("view_website_meta_og_img") or ""))
             )
         for snapshot in view_snapshots:
             referenced_ids |= self._extract_attachment_ids(
@@ -929,17 +988,20 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         page_map = {}
         imported_ids = []
         for page_data in pages_payload:
+            source_view_id = str(page_data.get("view_source_id") or "")
+            target_view = self._import_embedded_page_view(website, page_data)
+            if target_view and source_view_id:
+                view_map[source_view_id] = target_view
+            if not target_view and source_view_id:
+                target_view = view_map.get(source_view_id)
+
             view_key = page_data.get("view_key")
-            target_view = False
-            if view_key:
+            if not target_view and view_key:
                 target_view = self.env["ir.ui.view"].sudo().with_context(active_test=False).search(
                     [("key", "=", view_key), ("website_id", "in", (False, website.id))],
                     order="website_id desc, id desc",
                     limit=1,
                 )
-            if not target_view:
-                source_view_id = str(page_data.get("view_source_id") or "")
-                target_view = view_map.get(source_view_id)
             if not target_view:
                 self._add_import_warning(
                     section="page_skip",
@@ -999,6 +1061,59 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             self._safe_unlink(stale_pages, section="page_unlink", item="stale_pages")
 
         return page_map
+
+    def _import_embedded_page_view(self, website, page_data):
+        arch_db = page_data.get("view_arch_db")
+        if not arch_db:
+            return False
+
+        View = self.env["ir.ui.view"].sudo().with_context(active_test=False)
+        view_key = page_data.get("view_key")
+        values = {
+            "name": page_data.get("view_name") or page_data.get("name") or "Imported Page View",
+            "type": page_data.get("view_type") or "qweb",
+            "priority": page_data.get("view_priority") or 16,
+            "mode": "primary",
+            "active": bool(page_data.get("view_active", True)),
+            "track": bool(page_data.get("view_track")),
+            "visibility": page_data.get("view_visibility") or "",
+            "website_meta_title": page_data.get("view_website_meta_title"),
+            "website_meta_description": page_data.get("view_website_meta_description"),
+            "website_meta_keywords": page_data.get("view_website_meta_keywords"),
+            "website_meta_og_img": page_data.get("view_website_meta_og_img"),
+            "seo_name": page_data.get("view_seo_name"),
+            "arch_db": arch_db,
+            "website_id": website.id,
+            "inherit_id": False,
+        }
+        if "view_visibility_password" in page_data:
+            values["visibility_password"] = page_data.get("view_visibility_password") or False
+        if view_key:
+            values["key"] = view_key
+        else:
+            values["key"] = self._generate_unique_view_key(website, "website.imported_page")
+
+        target = False
+        if view_key:
+            target = View.search([("key", "=", view_key), ("website_id", "=", website.id)], limit=1)
+
+        if target:
+            if self.overwrite_views:
+                if not self._safe_write(
+                    target.with_context(website_id=website.id, no_cow=True),
+                    values,
+                    section="page_view_write",
+                    item=view_key or page_data.get("url"),
+                ):
+                    return False
+            return target
+
+        return self._safe_create(
+            View.with_context(website_id=website.id, no_cow=True),
+            values,
+            section="page_view_create",
+            item=view_key or page_data.get("url"),
+        )
 
     def _import_menus(self, website, menus_payload, page_map):
         if not self.overwrite_menus:
@@ -1354,13 +1469,13 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         if not raw_text:
             return ids
 
-        path_regex = re.compile(r"/web/(?:image|content)/(?:ir\.attachment/)?(\d+)")
+        path_regex = re.compile(r"/web/(?:image|content)/(?:ir\.attachment/)?(\d+)(?:-[^/?#\"'\s<>/]+)?")
         for match in path_regex.finditer(raw_text):
             ids.add(int(match.group(1)))
 
         query_regex = re.compile(r"/web/(?:image|content)\?[^\"'\s<>]+")
         for match in query_regex.finditer(raw_text):
-            parsed = urlparse(match.group(0))
+            parsed = urlparse(match.group(0).replace("&amp;", "&"))
             query_values = parse_qs(parsed.query)
             attachment_id = (query_values.get("id") or [False])[0]
             model_name = (query_values.get("model") or [False])[0]
@@ -1375,7 +1490,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         if not raw_text or not id_map:
             return raw_text
 
-        path_regex = re.compile(r"(/web/(?:image|content)/(?:ir\.attachment/)?)(\d+)")
+        path_regex = re.compile(r"(/web/(?:image|content)/(?:ir\.attachment/)?)(\d+)(?:-[^/?#\"'\s<>/]+)?")
 
         def _replace_path(match):
             old_id = match.group(2)
@@ -1386,7 +1501,8 @@ class WebsiteSiteTransferWizard(models.TransientModel):
 
         def _replace_query(match):
             fragment = match.group(0)
-            parsed = urlparse(fragment)
+            uses_html_entities = "&amp;" in fragment
+            parsed = urlparse(fragment.replace("&amp;", "&"))
             query_values = parse_qs(parsed.query, keep_blank_values=True)
             attachment_id = (query_values.get("id") or [False])[0]
             model_name = (query_values.get("model") or [False])[0]
@@ -1395,7 +1511,8 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             if model_name and model_name != "ir.attachment":
                 return fragment
             query_values["id"] = [id_map[attachment_id]]
-            return urlunparse(parsed._replace(query=urlencode(query_values, doseq=True)))
+            updated = urlunparse(parsed._replace(query=urlencode(query_values, doseq=True)))
+            return updated.replace("&", "&amp;") if uses_html_entities else updated
 
         return query_regex.sub(_replace_query, remapped)
 
