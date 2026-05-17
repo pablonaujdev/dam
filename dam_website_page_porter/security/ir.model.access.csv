@@ -1,3 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_website_page_transfer_wizard,website.page.transfer.wizard,model_website_page_transfer_wizard,website.group_website_designer,1,1,1,1
+access_website_site_transfer_wizard,website.site.transfer.wizard,model_website_site_transfer_wizard,website.group_website_designer,1,1,1,1
 

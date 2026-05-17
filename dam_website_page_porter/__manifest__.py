@@ -1,9 +1,13 @@
 {
-    "name": "DAM Website Page Porter",
-    "summary": "Export and import full Website pages with images",
+    "name": "DAM Website Site Porter",
+    "summary": "Export and import full Odoo 17 websites in one file",
     "description": """
-Export a Website page from Odoo 17 (content, SEO, visibility and images)
-into a JSON/ZIP file, then import it into another page with overwrite.
+Single-shot export/import for a complete website:
+- all website pages and routes (website.page)
+- website-specific views
+- website menus
+- website assets and attachments
+- website design/configuration fields
     """,
     "author": "DAM",
     "website": "https://www.dammad.es",
@@ -13,7 +17,7 @@ into a JSON/ZIP file, then import it into another page with overwrite.
     "depends": ["website"],
     "data": [
         "security/ir.model.access.csv",
-        "views/website_page_transfer_wizard_views.xml",
+        "views/website_site_transfer_wizard_views.xml",
     ],
     "installable": True,
     "application": True,

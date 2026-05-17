@@ -1,2 +1,2 @@
-from . import website_page_transfer_wizard
+from . import website_site_transfer_wizard
 

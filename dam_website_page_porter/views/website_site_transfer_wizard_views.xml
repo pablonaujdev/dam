@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_website_site_transfer_wizard_form" model="ir.ui.view">
+        <field name="name">website.site.transfer.wizard.form</field>
+        <field name="model">website.site.transfer.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Website Full Export/Import">
+                <sheet>
+                    <group>
+                        <field name="website_id" options="{'no_create': True}"/>
+                    </group>
+
+                    <notebook>
+                        <page string="Export Full Site">
+                            <group>
+                                <field name="export_format"/>
+                            </group>
+                            <group>
+                                <button
+                                    name="action_export_site"
+                                    type="object"
+                                    string="Export Complete Website"
+                                    class="btn-primary"/>
+                            </group>
+                            <group>
+                                <field name="export_filename" readonly="1" invisible="not export_file"/>
+                                <field name="export_file" filename="export_filename" readonly="1" invisible="not export_file"/>
+                            </group>
+                        </page>
+
+                        <page string="Import Full Site">
+                            <group>
+                                <field name="import_filename" invisible="1"/>
+                                <field name="import_file" filename="import_filename"/>
+                            </group>
+                            <group string="Import Behavior">
+                                <field name="preserve_domain"/>
+                                <field name="overwrite_pages"/>
+                                <field name="overwrite_menus"/>
+                                <field name="overwrite_views"/>
+                                <field name="overwrite_assets"/>
+                                <field name="overwrite_attachments"/>
+                            </group>
+                            <group>
+                                <button
+                                    name="action_import_site"
+                                    type="object"
+                                    string="Import and Overwrite Complete Website"
+                                    class="btn-primary"/>
+                            </group>
+                        </page>
+
+                        <page string="Log">
+                            <field name="log_message" readonly="1" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_website_site_transfer_wizard" model="ir.actions.act_window">
+        <field name="name">Site Export/Import</field>
+        <field name="res_model">website.site.transfer.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem
+        id="menu_website_site_transfer_wizard"
+        name="Site Export/Import"
+        parent="website.menu_content"
+        action="action_website_site_transfer_wizard"
+        groups="website.group_website_designer"
+        sequence="90"/>
+
+</odoo>
+
