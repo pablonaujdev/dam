@@ -1,12 +1,16 @@
 import base64
 import io
 import json
+import logging
 import re
 import zipfile
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
+
+_logger = logging.getLogger(__name__)
+IMPORT_WARNINGS_CONTEXT_KEY = "website_site_transfer_import_warnings"
 
 
 class WebsiteSiteTransferWizard(models.TransientModel):
@@ -76,7 +80,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                     "Export completed: %(file)s (pages=%(pages)s, views=%(views)s, assets=%(assets)s, attachments=%(atts)s).",
                     file=filename,
                     pages=len(payload.get("pages", [])),
-                    views=len(payload.get("views", [])),
+                    views=len(payload.get("view_snapshots") or payload.get("views", [])),
                     assets=len(payload.get("assets", [])),
                     atts=len(payload.get("attachments", [])),
                 ),
@@ -89,8 +93,16 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         if not self.import_file:
             raise UserError(_("Upload the website export file first."))
 
-        payload = self._parse_payload_file()
-        stats = self._import_payload(payload)
+        warnings = self._start_import_warnings()
+        import_wizard = self.with_context(**{IMPORT_WARNINGS_CONTEXT_KEY: warnings})
+        payload = import_wizard._parse_payload_file()
+        stats = import_wizard._import_payload(payload)
+        warning_text = ""
+        if warnings:
+            displayed = warnings[:25]
+            warning_text = "\n\nWarnings (%s):\n- %s" % (len(warnings), "\n- ".join(displayed))
+            if len(warnings) > len(displayed):
+                warning_text += "\n- ... (%s more)" % (len(warnings) - len(displayed))
         self.write(
             {
                 "log_message": _(
@@ -101,7 +113,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                     menus=stats["menus"],
                     assets=stats["assets"],
                     atts=stats["attachments"],
-                )
+                ) + warning_text
             }
         )
         return self._reload_wizard_action()
@@ -116,22 +128,61 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             "target": "new",
         }
 
+    def _start_import_warnings(self):
+        return []
+
+    def _add_import_warning(self, section, item, exc):
+        message = "%s [%s]: %s" % (section, item or "-", str(exc))
+        warnings = self.env.context.get(IMPORT_WARNINGS_CONTEXT_KEY)
+        if warnings is not None:
+            warnings.append(message)
+        _logger.warning("Website site porter warning: %s", message)
+
+    def _safe_write(self, recordset, values, section, item):
+        try:
+            with self.env.cr.savepoint():
+                recordset.write(values)
+            return True
+        except Exception as exc:  # noqa: BLE001 - we log and continue import
+            self._add_import_warning(section, item, exc)
+            return False
+
+    def _safe_create(self, recordset, values, section, item):
+        try:
+            with self.env.cr.savepoint():
+                return recordset.create(values)
+        except Exception as exc:  # noqa: BLE001 - we log and continue import
+            self._add_import_warning(section, item, exc)
+            return False
+
+    def _safe_unlink(self, recordset, section, item):
+        try:
+            with self.env.cr.savepoint():
+                recordset.unlink()
+            return True
+        except Exception as exc:  # noqa: BLE001 - we log and continue import
+            self._add_import_warning(section, item, exc)
+            return False
+
     def _build_export_payload(self, website):
         pages = self._export_pages(website)
         views = self._export_views(website)
+        view_snapshots = self._export_view_snapshots(website)
         assets = self._export_assets(website)
         menus = self._export_menus(website)
         website_values = self._export_website_values(website)
-        attachments = self._export_attachments(website, views, menus, website_values)
+        attachments = self._export_attachments(website, views, menus, website_values, view_snapshots)
 
         return {
             "meta": {
                 "tool": "dam_website_site_porter",
-                "format_version": 1,
+                "format_version": 2,
+                "view_import_strategy": "snapshot",
                 "exported_at": fields.Datetime.to_string(fields.Datetime.now()),
             },
             "website": website_values,
             "views": views,
+            "view_snapshots": view_snapshots,
             "pages": pages,
             "menus": menus,
             "assets": assets,
@@ -233,6 +284,87 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             )
         return result
 
+    def _export_view_snapshots(self, website):
+        View = self.env["ir.ui.view"].sudo().with_context(active_test=False)
+        website_views = View.search([("website_id", "=", website.id)], order="id")
+        pages = website.with_context(website_id=website.id)._get_website_pages(
+            domain=[("url", "!=", False)],
+            order="id",
+        )
+
+        snapshot_views = View
+        for page in pages:
+            if page.view_id:
+                snapshot_views |= page.view_id.sudo().with_context(active_test=False)
+        for view in website_views:
+            snapshot_view = self._get_snapshot_base_view(view)
+            if snapshot_view:
+                snapshot_views |= snapshot_view.sudo().with_context(active_test=False)
+
+        result = []
+        seen_keys = set()
+        for view in snapshot_views.sorted(key=lambda item: (item.website_id.id != website.id, item.id)):
+            key = view.key
+            if not key or key in seen_keys:
+                continue
+            try:
+                arch_db = view.with_context(
+                    website_id=website.id,
+                    lang=None,
+                    inherit_branding=False,
+                ).get_combined_arch()
+            except Exception as exc:  # noqa: BLE001 - export should keep moving
+                _logger.warning(
+                    "Website site porter could not snapshot view %s: %s",
+                    key or view.id,
+                    exc,
+                )
+                arch_db = view.with_context(lang=None).arch_db or ""
+
+            seen_keys.add(key)
+            result.append(
+                {
+                    "source_id": view.id,
+                    "source_view_ids": self._get_snapshot_source_view_ids(view, website_views),
+                    "key": key,
+                    "name": view.name,
+                    "type": view.type or "qweb",
+                    "priority": view.priority,
+                    "active": view.active,
+                    "track": view.track,
+                    "visibility": view.visibility,
+                    "visibility_password": view.sudo().visibility_password,
+                    "website_meta_title": view.website_meta_title,
+                    "website_meta_description": view.website_meta_description,
+                    "website_meta_keywords": view.website_meta_keywords,
+                    "website_meta_og_img": view.website_meta_og_img,
+                    "seo_name": view.seo_name,
+                    "arch_db": arch_db,
+                }
+            )
+        return result
+
+    def _get_snapshot_base_view(self, view):
+        base = view
+        while base.inherit_id:
+            base = base.inherit_id
+        if base.key and view.website_id:
+            specific_base = self.env["ir.ui.view"].sudo().with_context(active_test=False).search(
+                [("key", "=", base.key), ("website_id", "=", view.website_id.id)],
+                limit=1,
+            )
+            if specific_base:
+                return specific_base
+        return base
+
+    def _get_snapshot_source_view_ids(self, snapshot_view, website_views):
+        source_ids = {snapshot_view.id}
+        snapshot_base_id = self._get_snapshot_base_view(snapshot_view).id
+        for view in website_views:
+            if self._get_snapshot_base_view(view).id == snapshot_base_id:
+                source_ids.add(view.id)
+        return sorted(source_ids)
+
     def _export_assets(self, website):
         assets = self.env["ir.asset"].sudo().with_context(active_test=False).search(
             [("website_id", "=", website.id)],
@@ -277,19 +409,26 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             )
         return result
 
-    def _export_attachments(self, website, views_payload, menus_payload, website_values):
+    def _export_attachments(self, website, views_payload, menus_payload, website_values, view_snapshots=None):
         Attachment = self.env["ir.attachment"].sudo().with_context(active_test=False)
-        view_ids = [view["source_id"] for view in views_payload]
+        view_snapshots = view_snapshots or []
+        view_ids = {view["source_id"] for view in views_payload if view.get("source_id")}
+        for snapshot in view_snapshots:
+            view_ids |= set(snapshot.get("source_view_ids") or [])
         attachments = Attachment.search([("website_id", "=", website.id)])
         if view_ids:
             attachments |= Attachment.search(
-                [("res_model", "=", "ir.ui.view"), ("res_id", "in", view_ids)]
+                [("res_model", "=", "ir.ui.view"), ("res_id", "in", list(view_ids))]
             )
 
         referenced_ids = set()
         for view in views_payload:
             referenced_ids |= self._extract_attachment_ids(
                 "%s %s" % ((view.get("arch_db") or ""), (view.get("website_meta_og_img") or ""))
+            )
+        for snapshot in view_snapshots:
+            referenced_ids |= self._extract_attachment_ids(
+                "%s %s" % ((snapshot.get("arch_db") or ""), (snapshot.get("website_meta_og_img") or ""))
             )
         for menu in menus_payload:
             referenced_ids |= self._extract_attachment_ids(
@@ -350,7 +489,10 @@ class WebsiteSiteTransferWizard(models.TransientModel):
     def _import_payload(self, payload):
         website = self.website_id.sudo()
         self._import_website_values(website, payload["website"])
-        view_map = self._import_views(website, payload.get("views", []))
+        if payload.get("view_snapshots"):
+            view_map = self._import_view_snapshots(website, payload.get("view_snapshots", []))
+        else:
+            view_map = self._import_views(website, payload.get("views", []))
         page_map = self._import_pages(website, payload.get("pages", []), view_map)
         menus_count = self._import_menus(website, payload.get("menus", []), page_map)
         assets_count = self._import_assets(website, payload.get("assets", []))
@@ -360,7 +502,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
         self._remap_menu_references(website, attachment_map)
 
         return {
-            "views": len(view_map),
+            "views": len(set(view.id for view in view_map.values())),
             "pages": len(page_map),
             "menus": menus_count,
             "assets": assets_count,
@@ -405,7 +547,92 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             if theme:
                 write_vals["theme_id"] = theme.id
 
-        website.with_context(website_id=website.id).write(write_vals)
+        self._safe_write(
+            website.with_context(website_id=website.id),
+            write_vals,
+            section="website",
+            item=website.name,
+        )
+
+    def _import_view_snapshots(self, website, snapshots_payload):
+        View = self.env["ir.ui.view"].sudo().with_context(active_test=False)
+        source_id_map = {}
+
+        if self.overwrite_views:
+            self._safe_write(
+                View.search(
+                    [
+                        ("website_id", "=", website.id),
+                        "|",
+                        ("inherit_id", "!=", False),
+                        ("mode", "!=", "primary"),
+                    ]
+                ),
+                {"active": False},
+                section="view_snapshot_deactivate",
+                item="existing_inherited_website_views",
+            )
+
+        for snapshot_data in snapshots_payload:
+            key = snapshot_data.get("key")
+            values = {
+                "name": snapshot_data.get("name") or "Imported Website View",
+                "type": snapshot_data.get("type") or "qweb",
+                "priority": snapshot_data.get("priority") or 16,
+                "mode": "primary",
+                "active": bool(snapshot_data.get("active", True)),
+                "track": bool(snapshot_data.get("track")),
+                "visibility": snapshot_data.get("visibility") or "",
+                "website_meta_title": snapshot_data.get("website_meta_title"),
+                "website_meta_description": snapshot_data.get("website_meta_description"),
+                "website_meta_keywords": snapshot_data.get("website_meta_keywords"),
+                "website_meta_og_img": snapshot_data.get("website_meta_og_img"),
+                "seo_name": snapshot_data.get("seo_name"),
+                "arch_db": snapshot_data.get("arch_db") or "",
+                "website_id": website.id,
+                "inherit_id": False,
+            }
+            if "visibility_password" in snapshot_data:
+                values["visibility_password"] = snapshot_data.get("visibility_password") or False
+            if key:
+                values["key"] = key
+            else:
+                values["key"] = self._generate_unique_view_key(website, "website.imported_snapshot")
+
+            target = False
+            if key:
+                target = View.search(
+                    [("key", "=", key), ("website_id", "=", website.id)],
+                    limit=1,
+                )
+
+            if target:
+                if self.overwrite_views:
+                    if not self._safe_write(
+                        target.with_context(website_id=website.id, no_cow=True),
+                        values,
+                        section="view_snapshot_write",
+                        item=key or snapshot_data.get("name"),
+                    ):
+                        continue
+            else:
+                target = self._safe_create(
+                    View.with_context(website_id=website.id, no_cow=True),
+                    values,
+                    section="view_snapshot_create",
+                    item=key or snapshot_data.get("name"),
+                )
+                if not target:
+                    continue
+
+            source_ids = set(snapshot_data.get("source_view_ids") or [])
+            source_id = snapshot_data.get("source_id")
+            if source_id:
+                source_ids.add(source_id)
+            for source_id in source_ids:
+                source_id_map[str(source_id)] = target
+
+        return source_id_map
 
     def _import_views(self, website, views_payload):
         View = self.env["ir.ui.view"].sudo().with_context(active_test=False)
@@ -428,10 +655,10 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                 inherit_key = view_data.get("inherit_key")
                 inherit_id = False
                 if inherit_key:
-                    inherit_id = self._resolve_inherit_view(website, inherit_key, key_map)
-                    if not inherit_id and inherit_key in payload_by_key:
+                    if inherit_key in payload_by_key and inherit_key not in key_map:
                         next_pending.append(view_data)
                         continue
+                    inherit_id = self._resolve_inherit_view(website, inherit_key, key_map)
 
                 values = {
                     "name": view_data.get("name") or "Imported Website View",
@@ -464,11 +691,24 @@ class WebsiteSiteTransferWizard(models.TransientModel):
 
                 if target:
                     if self.overwrite_views:
-                        target.with_context(website_id=website.id).write(values)
+                        if not self._safe_write(
+                            target.with_context(website_id=website.id),
+                            values,
+                            section="view_write",
+                            item=key or view_data.get("name"),
+                        ):
+                            continue
                 else:
                     if not key:
                         values["key"] = self._generate_unique_view_key(website, "website.imported_view")
-                    target = View.with_context(website_id=website.id, no_cow=True).create(values)
+                    target = self._safe_create(
+                        View.with_context(website_id=website.id, no_cow=True),
+                        values,
+                        section="view_create",
+                        item=key or view_data.get("name"),
+                    )
+                    if not target:
+                        continue
 
                 progressed = True
                 source_id = str(view_data.get("source_id") or "")
@@ -511,11 +751,24 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                         )
                     if target:
                         if self.overwrite_views:
-                            target.with_context(website_id=website.id).write(values)
+                            if not self._safe_write(
+                                target.with_context(website_id=website.id),
+                                values,
+                                section="view_write_fallback",
+                                item=key or view_data.get("name"),
+                            ):
+                                continue
                     else:
                         if not key:
                             values["key"] = self._generate_unique_view_key(website, "website.imported_view")
-                        target = View.with_context(website_id=website.id, no_cow=True).create(values)
+                        target = self._safe_create(
+                            View.with_context(website_id=website.id, no_cow=True),
+                            values,
+                            section="view_create_fallback",
+                            item=key or view_data.get("name"),
+                        )
+                        if not target:
+                            continue
 
                     source_id = str(view_data.get("source_id") or "")
                     if source_id:
@@ -534,12 +787,22 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                 continue
             inherit_target = self._resolve_inherit_view(website, inherit_key, key_map)
             if inherit_target and key_map[key].inherit_id.id != inherit_target:
-                key_map[key].with_context(website_id=website.id).write({"inherit_id": inherit_target})
+                self._safe_write(
+                    key_map[key].with_context(website_id=website.id),
+                    {"inherit_id": inherit_target},
+                    section="view_inherit_patch",
+                    item=key,
+                )
 
         if self.overwrite_views:
             imported_ids = [view.id for view in source_id_map.values()]
             stale_views = View.search([("website_id", "=", website.id), ("id", "not in", imported_ids)])
-            stale_views.write({"active": False})
+            self._safe_write(
+                stale_views,
+                {"active": False},
+                section="view_deactivate",
+                item="stale_views",
+            )
 
         return source_id_map
 
@@ -579,6 +842,11 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                 source_view_id = str(page_data.get("view_source_id") or "")
                 target_view = view_map.get(source_view_id)
             if not target_view:
+                self._add_import_warning(
+                    section="page_skip",
+                    item=page_data.get("url"),
+                    exc=ValidationError(_("Missing compatible target view for this page.")),
+                )
                 continue
 
             vals = {
@@ -605,9 +873,22 @@ class WebsiteSiteTransferWizard(models.TransientModel):
 
             if target_page:
                 if self.overwrite_pages:
-                    target_page.with_context(website_id=website.id).write(vals)
+                    if not self._safe_write(
+                        target_page.with_context(website_id=website.id),
+                        vals,
+                        section="page_write",
+                        item=vals["url"],
+                    ):
+                        continue
             else:
-                target_page = Page.with_context(website_id=website.id, no_cow=True).create(vals)
+                target_page = self._safe_create(
+                    Page.with_context(website_id=website.id, no_cow=True),
+                    vals,
+                    section="page_create",
+                    item=vals["url"],
+                )
+                if not target_page:
+                    continue
 
             source_id = str(page_data.get("source_id") or "")
             if source_id:
@@ -616,7 +897,7 @@ class WebsiteSiteTransferWizard(models.TransientModel):
 
         if self.overwrite_pages and imported_ids:
             stale_pages = Page.search([("website_id", "=", website.id), ("id", "not in", imported_ids)])
-            stale_pages.unlink()
+            self._safe_unlink(stale_pages, section="page_unlink", item="stale_pages")
 
         return page_map
 
@@ -626,15 +907,19 @@ class WebsiteSiteTransferWizard(models.TransientModel):
 
         Menu = self.env["website.menu"].sudo().with_context(active_test=False, website_id=website.id)
         root_menu = website.menu_id
-        Menu.search([("website_id", "=", website.id), ("id", "!=", root_menu.id)]).unlink()
+        self._safe_unlink(
+            Menu.search([("website_id", "=", website.id), ("id", "!=", root_menu.id)]),
+            section="menu_unlink",
+            item="existing_menus",
+        )
 
-        payload_by_source = {str(item["source_id"]): item for item in menus_payload if item.get("source_id")}
         created = {}
 
         # Determine source root menu and update destination root with it.
         source_root = next((item for item in menus_payload if not item.get("parent_source_id")), False)
         if source_root:
-            root_menu.write(
+            self._safe_write(
+                root_menu,
                 {
                     "name": source_root.get("name") or root_menu.name,
                     "url": source_root.get("url") or root_menu.url,
@@ -642,7 +927,9 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                     "sequence": source_root.get("sequence") or root_menu.sequence,
                     "mega_menu_content": source_root.get("mega_menu_content") or False,
                     "mega_menu_classes": source_root.get("mega_menu_classes") or False,
-                }
+                },
+                section="menu_root_write",
+                item=source_root.get("name"),
             )
             created[str(source_root["source_id"])] = root_menu
 
@@ -678,7 +965,14 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                     "mega_menu_content": menu_data.get("mega_menu_content") or False,
                     "mega_menu_classes": menu_data.get("mega_menu_classes") or False,
                 }
-                new_menu = Menu.create(vals)
+                new_menu = self._safe_create(
+                    Menu,
+                    vals,
+                    section="menu_create",
+                    item=menu_data.get("name"),
+                )
+                if not new_menu:
+                    continue
                 if source_id:
                     created[source_id] = new_menu
                 progressed = True
@@ -696,7 +990,14 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                         "mega_menu_content": menu_data.get("mega_menu_content") or False,
                         "mega_menu_classes": menu_data.get("mega_menu_classes") or False,
                     }
-                    new_menu = Menu.create(vals)
+                    new_menu = self._safe_create(
+                        Menu,
+                        vals,
+                        section="menu_create_fallback",
+                        item=menu_data.get("name"),
+                    )
+                    if not new_menu:
+                        continue
                     if source_id:
                         created[source_id] = new_menu
                 break
@@ -725,14 +1026,27 @@ class WebsiteSiteTransferWizard(models.TransientModel):
                 target = Asset.search([("key", "=", key), ("website_id", "=", website.id)], limit=1)
             if target:
                 if self.overwrite_assets:
-                    target.write(vals)
+                    if not self._safe_write(
+                        target,
+                        vals,
+                        section="asset_write",
+                        item=key or asset_data.get("name"),
+                    ):
+                        continue
             else:
-                target = Asset.create(vals)
+                target = self._safe_create(
+                    Asset,
+                    vals,
+                    section="asset_create",
+                    item=key or asset_data.get("name"),
+                )
+                if not target:
+                    continue
             imported_ids.append(target.id)
 
         if self.overwrite_assets:
             stale_assets = Asset.search([("website_id", "=", website.id), ("id", "not in", imported_ids)])
-            stale_assets.unlink()
+            self._safe_unlink(stale_assets, section="asset_unlink", item="stale_assets")
 
         return len(imported_ids)
 
@@ -741,7 +1055,11 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             return {}, 0
 
         Attachment = self.env["ir.attachment"].sudo().with_context(active_test=False)
-        Attachment.search([("website_id", "=", website.id)]).unlink()
+        self._safe_unlink(
+            Attachment.search([("website_id", "=", website.id)]),
+            section="attachment_unlink",
+            item="existing_attachments",
+        )
 
         id_map = {}
         created_count = 0
@@ -782,7 +1100,14 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             else:
                 vals["url"] = att_data.get("url")
 
-            new_attachment = Attachment.create(vals)
+            new_attachment = self._safe_create(
+                Attachment,
+                vals,
+                section="attachment_create",
+                item=att_data.get("name"),
+            )
+            if not new_attachment:
+                continue
             created_count += 1
             source_id = str(att_data.get("source_id") or "")
             if source_id:
@@ -795,31 +1120,43 @@ class WebsiteSiteTransferWizard(models.TransientModel):
             return
         head = self._remap_attachment_references(website.custom_code_head, attachment_map)
         footer = self._remap_attachment_references(website.custom_code_footer, attachment_map)
-        website.with_context(website_id=website.id).write(
+        self._safe_write(
+            website.with_context(website_id=website.id),
             {
                 "custom_code_head": head,
                 "custom_code_footer": footer,
-            }
+            },
+            section="website_remap",
+            item=website.name,
         )
 
     def _remap_view_references(self, view_map, attachment_map):
         if not attachment_map:
             return
-        for view in view_map.values():
+        views = self.env["ir.ui.view"].sudo().browse(set(view.id for view in view_map.values()))
+        for view in views:
             arch_db = self._remap_attachment_references(view.with_context(lang=None).arch_db, attachment_map)
             og_img = self._remap_attachment_references(view.website_meta_og_img, attachment_map)
-            view.write({"arch_db": arch_db, "website_meta_og_img": og_img})
+            self._safe_write(
+                view,
+                {"arch_db": arch_db, "website_meta_og_img": og_img},
+                section="view_remap",
+                item=view.key or view.name,
+            )
 
     def _remap_menu_references(self, website, attachment_map):
         if not attachment_map:
             return
         menus = self.env["website.menu"].sudo().search([("website_id", "=", website.id)])
         for menu in menus:
-            menu.write(
+            self._safe_write(
+                menu,
                 {
                     "url": self._remap_attachment_references(menu.url, attachment_map),
                     "mega_menu_content": self._remap_attachment_references(menu.mega_menu_content, attachment_map),
-                }
+                },
+                section="menu_remap",
+                item=menu.name,
             )
 
     def _extract_attachment_ids(self, raw_text):

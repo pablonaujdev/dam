@@ -12,7 +12,7 @@ Single-shot export/import for a complete website:
     "author": "DAM",
     "website": "https://www.dammad.es",
     "category": "Website",
-    "version": "17.0.1.0.0",
+    "version": "17.0.1.0.1",
     "license": "LGPL-3",
     "depends": ["website"],
     "data": [
