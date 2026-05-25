@@ -18,7 +18,49 @@ class ResPartnerInherit(models.Model):
                                             string='Impuestos para Compra',
                                             domain=[('type_tax_use', '=', 'purchase')])
 
-    # jh_old_code = fields.Char(string='Código Antiguo')
+    jh_stock_picking_count = fields.Integer(string="Movimientos de stock", compute='_compute_stock_picking_count')
+
+    def _compute_stock_picking_count(self):
+        StockPicking = self.env['stock.picking']
+
+        for partner in self:
+            partner.jh_stock_picking_count = StockPicking.search_count(
+                partner._get_stock_picking_domain()
+            )
+
+    def _get_stock_picking_domain(self):
+        """
+               Dominio base para buscar movimientos de stock asociados al contacto.
+
+               Usamos commercial_partner_id para que, si el contacto pertenece a una empresa,
+               también se puedan ver los movimientos relacionados con la empresa principal
+               y sus direcciones/contactos hijos.
+
+               """
+        self.ensure_one()
+
+        partner = self.commercial_partner_id or self
+
+        return [
+            ("partner_id", "child_of", partner.id),
+        ]
+
+    def action_view_stock_pickings(self):
+        self.ensure_one()
+
+        return{
+            "type": "ir.actions.act_window",
+            "name": _("Movimientos de stock - %s") % self.display_name,
+            "res_model": "stock.picking",
+            "view_mode": "tree,form",
+            "domain": self._get_stock_picking_domain(),
+            "context": {
+                "default_partner_id": self.id,
+                "group_by": "picking_type_id",
+            },
+            "target": "current",
+        }
+
 
 
 class SaleOrderLineInherit(models.Model):

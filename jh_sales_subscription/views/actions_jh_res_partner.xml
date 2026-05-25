@@ -18,5 +18,27 @@
             </field>
         </record>
 
+        <record id="res_partner_inherit_stock_picking" model="ir.ui.view">
+            <field name="name">res.partner.inherit.stock.picking</field>
+            <field name="model">res.partner</field>
+            <field name="inherit_id" ref="base.view_partner_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//button[field[@name='purchase_order_count']]" position="after">
+                    <button
+                        name="action_view_stock_pickings"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-truck"
+                        groups="stock.group_stock_user">
+                        <field
+                            name="jh_stock_picking_count"
+                            widget="statinfo"
+                            string="Movimientos"/>
+                    </button>
+                </xpath>
+
+            </field>
+        </record>
+
     </data>
 </odoo>
