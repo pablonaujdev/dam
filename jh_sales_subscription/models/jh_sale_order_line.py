@@ -58,6 +58,62 @@ class SaleOrderInherit(models.Model):
             return ['company_id', 'currency_id', 'partner_invoice_id']
         return super()._get_invoice_grouping_keys()
 
+    def _jh_has_price_confirmation_gap(self):
+        self.ensure_one()
+        recurring_lines = self.order_line.filtered(
+            lambda l: l.recurring_invoice and not l.display_type and not l.is_downpayment and l.product_id
+        )
+        for line in recurring_lines:
+            vals = line._get_pricelist_reprice_vals()
+            if not vals:
+                continue
+            price_differs = 'price_unit' in vals and float_compare(
+                line.price_unit or 0.0,
+                vals['price_unit'] or 0.0,
+                precision_digits=6,
+            ) != 0
+            discount_differs = 'discount' in vals and float_compare(
+                line.discount or 0.0,
+                vals['discount'] or 0.0,
+                precision_digits=2,
+            ) != 0
+            if price_differs or discount_differs:
+                return True
+        return False
+
+    def _jh_open_subscription_price_confirmation(self, subscription_state):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Confirmar actualizacion de precios'),
+            'res_model': 'jh.subscription.price.confirmation.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_order_id': self.id,
+                'default_subscription_state': subscription_state,
+            },
+        }
+
+    def _jh_prepare_subscription_order_with_mode(self, subscription_state):
+        self.ensure_one()
+        lang = self.partner_id.lang or self.env.user.lang
+        origin = 'renewal' if subscription_state == '2_renewal' else 'upsell'
+        message_body = self._get_order_digest(origin=origin, lang=lang)
+        return self._prepare_renew_upsell_order(subscription_state, message_body)
+
+    def prepare_renewal_order(self):
+        self.ensure_one()
+        if not self.env.context.get('skip_renewal_price_confirmation') and self._jh_has_price_confirmation_gap():
+            return self._jh_open_subscription_price_confirmation('2_renewal')
+        return self._jh_prepare_subscription_order_with_mode('2_renewal')
+
+    def prepare_upsell_order(self):
+        self.ensure_one()
+        if not self.env.context.get('skip_renewal_price_confirmation') and self._jh_has_price_confirmation_gap():
+            return self._jh_open_subscription_price_confirmation('7_upsell')
+        return self._jh_prepare_subscription_order_with_mode('7_upsell')
+
     def _prepare_upsell_renew_order_values(self, subscription_state):
         """
         Sobrescribe el méodo para:
@@ -82,15 +138,21 @@ class SaleOrderInherit(models.Model):
                     entry[2]['lot_id'] = original_line.lot_id.id
                     _logger.info(f"[RENOVACIÓN] Heredando lote {original_line.lot_id.name} para producto {product_id}")
                 
-                # 2. Forzar recálculo del precio eliminando price_unit y discount
-                # Esto permite que el sistema aplique automáticamente la tarifa vigente
-                # cuando se cree la nueva línea de orden
-                if 'price_unit' in entry[2]:
-                    del entry[2]['price_unit']
-                    _logger.info(f"[RENOVACIÓN] Eliminando price_unit para recalcular precio actual del producto {product_id}")
-                
-                if 'discount' in entry[2]:
-                    del entry[2]['discount']
+                pricing_mode = self.env.context.get('renewal_pricing_mode', 'update_tariff')
+                if pricing_mode == 'keep_current':
+                    entry[2]['price_unit'] = original_line.price_unit
+                    entry[2]['discount'] = original_line.discount
+                    _logger.info(f"[RENOVACIÓN] Manteniendo precio y descuento actuales para producto {product_id}")
+                else:
+                    # 2. Forzar recálculo del precio eliminando price_unit y discount
+                    # Esto permite que el sistema aplique automáticamente la tarifa vigente
+                    # cuando se cree la nueva línea de orden
+                    if 'price_unit' in entry[2]:
+                        del entry[2]['price_unit']
+                        _logger.info(f"[RENOVACIÓN] Eliminando price_unit para recalcular precio actual del producto {product_id}")
+
+                    if 'discount' in entry[2]:
+                        del entry[2]['discount']
                     _logger.info(f"[RENOVACIÓN] Eliminando discount para recalcular descuento según tarifa del producto {product_id}")
 
         return values
@@ -713,4 +775,3 @@ class AccountMoveSendInherit(models.TransientModel):
             new_kwargs = dict(kwargs, partner_ids=[partner_id])
             result = super()._send_mail(move, mail_template, **new_kwargs)
         return result
-

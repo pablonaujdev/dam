@@ -25,6 +25,29 @@
             </field>
         </record>
 
+        <record id="account_invoice_line_lot_inherit" model="ir.ui.view">
+            <field name="name">account.invoice.line.lot.inherit</field>
+            <field name="model">account.move</field>
+            <field name="inherit_id" ref="account.view_move_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='invoice_line_ids']/tree/field[@name='discount']" position="after">
+                    <field name="jh_sale_lot_id"
+                           string="Lote/N° Serie"
+                           optional="show"
+                           context="{'default_product_id': product_id, 'default_company_id': company_id}"
+                           readonly="parent.state != 'draft'"
+                           column_invisible="parent.move_type not in ('out_invoice', 'out_refund', 'out_receipt')"/>
+                </xpath>
+                <xpath expr="//field[@name='invoice_line_ids']/form/sheet/group[1]/field[@name='discount']" position="after">
+                    <field name="jh_sale_lot_id"
+                           string="Lote/N° Serie"
+                           context="{'default_product_id': product_id, 'default_company_id': company_id}"
+                           readonly="parent.state != 'draft'"
+                           invisible="parent.move_type not in ('out_invoice', 'out_refund', 'out_receipt')"/>
+                </xpath>
+            </field>
+        </record>
+
         <record id="account_invoice_partner_shipping_id_inherit" model="ir.ui.view">
             <field name="name">account.invoice.partner.shipping.id.inherit</field>
             <field name="model">account.move</field>
@@ -46,6 +69,7 @@
                 </xpath>
             </field>
         </record>
+
         <record id="account_mail_partner_shipping_id_inherit" model="ir.ui.view">
             <field name="name">account.mail.partner.shipping.id.inherit</field>
             <field name="model">account.move.send</field>
@@ -75,3 +99,4 @@
         </record>
   </data>
 </odoo>
+

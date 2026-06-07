@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="automation_sync_invoice_lot_to_sale_line" model="base.automation">
+        <field name="name">Sincronizar lote factura a venta</field>
+        <field name="model_id" ref="account.model_account_move_line"/>
+        <field name="trigger">on_write</field>
+        <field name="trigger_field_ids" eval="[(6, 0, [ref('jh_sales_subscription.field_account_move_line__jh_sale_lot_id')])]"/>
+        <field name="filter_domain">[('move_id.move_type', 'in', ['out_invoice', 'out_refund', 'out_receipt'])]</field>
+        <field name="active" eval="True"/>
+        <field name="action_server_ids" eval="[(0, 0, {
+            'name': 'Sincronizar lote factura a venta',
+            'model_id': ref('account.model_account_move_line'),
+            'state': 'code',
+            'code': &quot;for line in records:\n    if line.display_type not in (False, 'product'):\n        continue\n    if not line.move_id.is_sale_document(include_receipts=True):\n        continue\n    if line.move_id.state != 'draft':\n        continue\n    if len(line.sale_line_ids) != 1:\n        continue\n    sale_line = line.sale_line_ids[:1]\n    if sale_line.lot_id != line.jh_sale_lot_id:\n        sale_line.with_context(skip_invoice_lot_sync=True).write({'lot_id': line.jh_sale_lot_id.id or False})&quot;,
+        })]"/>
+    </record>
+</odoo>

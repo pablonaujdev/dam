@@ -3,6 +3,7 @@ import time
 import logging
 from psycopg2 import errors
 from odoo import models, api, fields
+from odoo.exceptions import UserError
 try:
     # Odoo 14+ suele traer esto aquí
     from odoo.tools.misc import split_every as _split_every
@@ -120,8 +121,47 @@ class AccountMoveLine(models.Model):
     jh_sale_lot_id = fields.Many2one(
         'stock.lot',
         string='Lote/Número de Serie',
-        help='Lote o número de serie asociado desde la línea de venta'
+        help='Lote o número de serie asociado desde la línea de venta',
+        domain="[('product_id', '=', product_id)]"
     )
+
+    def _jh_is_syncable_invoice_line(self):
+        self.ensure_one()
+        return (
+            self.display_type in (False, 'product')
+            and self.move_id.is_sale_document(include_receipts=True)
+        )
+
+    def _jh_validate_lot_sync(self):
+        for line in self:
+            if not line._jh_is_syncable_invoice_line():
+                continue
+            if line.move_id.state != 'draft':
+                raise UserError('Solo se puede corregir el lote o numero de serie en facturas en borrador.')
+            if len(line.sale_line_ids) > 1:
+                raise UserError(
+                    'La linea de factura esta vinculada a varias lineas de venta. '
+                    'No se puede sincronizar automáticamente el lote o numero de serie.'
+                )
+
+    def _jh_sync_lot_to_sale_line(self):
+        for line in self:
+            if not line._jh_is_syncable_invoice_line():
+                continue
+            sale_line = line.sale_line_ids[:1]
+            if sale_line:
+                sale_line.with_context(skip_invoice_lot_sync=True).write({
+                    'lot_id': line.jh_sale_lot_id.id or False,
+                })
+
+    def write(self, vals):
+        sync_lot = 'jh_sale_lot_id' in vals and not self.env.context.get('skip_invoice_lot_sync')
+        if sync_lot:
+            self._jh_validate_lot_sync()
+        res = super().write(vals)
+        if sync_lot:
+            self._jh_sync_lot_to_sale_line()
+        return res
 
     jh_agents = fields.Char(string='Agentes',
                             compute='_compute_jh_agents_commission',
