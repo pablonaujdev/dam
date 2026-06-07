@@ -51,6 +51,85 @@ class SaleOrderInherit(models.Model):
         compute='_compute_invoice_status',
         store=True)
 
+    jh_delivery_status = fields.Selection(
+        selection=[
+            ("draft", "Por confirmar"),
+            ("not_required", "No requiere entrega"),
+            ("pending", "Pendiente"),
+            ("started", "En proceso"),
+            ("partial", "Entrega parcial"),
+            ("full", "Entrega finalizada"),
+            ("delivery_cancelled", "Entrega cancelada"),
+            ("cancelled", "Venta cancelada"),
+        ],
+        string= "Estado entrega material",
+        compute="_compute_jh_delivery_status",
+        store=True,
+        readonly=True,
+        index=True
+    )
+
+    @api.depends(
+        "state",
+        "delivery_status",
+        "picking_ids",
+        "picking_ids.state",
+        "order_line.product_id",
+        "order_line.product_id.type",
+        "order_line.product_uom_qty",
+        "order_line.display_type",
+    )
+
+    def _compute_jh_delivery_status(self):
+        for order in self:
+            # Cotiazaciones todavía no confirmadas.
+            if order.state in ("draft", "sent"):
+                order.jh_delivery_status = 'draft'
+                continue
+
+            # Orden de venta cancelada.
+            if order.state == "cancel":
+                order.jh_delivery_status = 'cancelled'
+                continue
+
+            # Líneas que deberían generar movimientos de inventario.
+            material_lines = order.order_line.filtered(
+                lambda line:
+                    not line.display_type
+                    and line.product_id
+                    and line.product_id.type in ("product", "consu")
+                    and line.product_uom_qty > 0
+            )
+
+            # Venta compuesta únicamente por servicios o suscripciones.
+            if not material_lines:
+                order.jh_delivery_status = "not_required"
+                continue
+
+            # La venta tiene material, pero todas las transferencias
+            # fueron canceladas y la orden sigue activa.
+            if (
+                order.picking_ids
+                and all(
+                    picking.state == "cancel"
+                    for picking in order.picking_ids
+                )
+            ):
+                order.jh_delivery_status = 'delivery_cancelled'
+                continue
+
+            # Aprovechamos el estado estándar calculado por sale_stock.
+            status_mapping = {
+                "pending": "pending",
+                "started": "started",
+                "partial": "partial",
+                "full": "full",
+            }
+
+            order.jh_delivery_status = status_mapping.get(
+                order.delivery_status,
+                "pending",
+            )
 
     def _get_invoice_grouping_keys(self):
         if self.env.context.get('force_minimal_grouping'):
