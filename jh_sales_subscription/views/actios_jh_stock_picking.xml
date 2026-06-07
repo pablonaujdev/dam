@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <record id="view_stock_picking_partner_product_tree" model="ir.ui.view">
+        <field name="name">
+            stock.picking.partner.product.tree
+        </field>
+
+        <field name="model">stock.picking</field>
+
+        <field name="arch" type="xml">
+            <tree
+                string="Movimientos de stock del contacto"
+                create="false"
+                delete="false">
+
+                <field name="name" string="Referencia"/>
+
+                <field
+                    name="picking_type_id"
+                    string="Tipo de movimiento"/>
+
+                <field
+                    name="partner_id"
+                    string="Contacto"/>
+
+                <field
+                    name="scheduled_date"
+                    string="Fecha programada"/>
+
+                <field
+                    name="date_done"
+                    string="Fecha realizada"
+                    optional="show"/>
+
+                <field
+                    name="origin"
+                    string="Documento origen"
+                    optional="show"/>
+
+                <field
+                    name="jh_product_ids"
+                    string="Productos"
+                    widget="many2many_tags"
+                    options="{
+                        'no_create': True,
+                        'no_create_edit': True
+                    }"/>
+
+                <field
+                    name="state"
+                    string="Estado"
+                    widget="badge"/>
+
+            </tree>
+        </field>
+    </record>
+
+    </data>>
+</odoo>

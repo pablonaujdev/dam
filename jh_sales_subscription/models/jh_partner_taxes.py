@@ -48,11 +48,19 @@ class ResPartnerInherit(models.Model):
     def action_view_stock_pickings(self):
         self.ensure_one()
 
-        return{
+        tree_view = self.env.ref(
+            "jh_sales_subscription.view_stock_picking_partner_product_tree"
+        )
+
+        return {
             "type": "ir.actions.act_window",
             "name": _("Movimientos de stock - %s") % self.display_name,
             "res_model": "stock.picking",
             "view_mode": "tree,form",
+            "views": [
+                (tree_view.id, "tree"),
+                (False, "form"),
+            ],
             "domain": self._get_stock_picking_domain(),
             "context": {
                 "default_partner_id": self.id,
