@@ -1,4 +1,5 @@
 from odoo import models, api, fields, _
+from odoo.exceptions import UserError
 from odoo.tools.float_utils import float_compare
 from dateutil.relativedelta import relativedelta
 from odoo.tools.float_utils import float_compare, float_round
@@ -10,6 +11,59 @@ _logger = logging.getLogger(__name__)
 
 class SaleAdvancePaymentInvInherit(models.TransientModel):
     _inherit = 'sale.advance.payment.inv'
+
+    def allowManualRecurringPrebillFallback(self, sale_orders, error_message):
+        has_subscription = any(sale_orders.mapped('is_subscription'))
+        end_date_guard_message = (
+            'recurrentes cuya fecha de vencimiento ha pasado' in error_message
+            or 'past their end date' in error_message
+        )
+        return self.advance_payment_method == 'delivered' and has_subscription and end_date_guard_message
+
+    def _create_invoices(self, sale_orders):
+        # standard Odoo version "17"
+        try:
+            return super()._create_invoices(sale_orders)
+        except Exception as error:
+            error_message = str(error)
+            if not self.allowManualRecurringPrebillFallback(sale_orders, error_message):
+                raise
+
+            subscriptions = sale_orders.filtered(
+                lambda order: (
+                    order.is_subscription
+                    and order.state in ('sale', 'done')
+                    and order.subscription_state not in ('5_renewed', '6_churn')
+                )
+            )
+            recurring_lines = subscriptions.order_line.filtered(
+                lambda line: (
+                    not line.display_type
+                    and not line.is_downpayment
+                    and line.state == 'sale'
+                    and line.recurring_invoice
+                    and line.product_id
+                    and line.product_id.invoice_policy == 'order'
+                )
+            )
+            if not recurring_lines:
+                raise
+
+            recurring_lines._reset_subscription_qty_to_invoice()
+            invoices = sale_orders.with_context(
+                raise_if_nothing_to_invoice=False,
+                jh_allow_recurring_prepay=True,
+            )._create_invoices(
+                final=self.deduct_down_payments,
+                grouped=not self.consolidated_billing,
+            )
+            if not invoices:
+                raise
+
+            if subscriptions:
+                subscriptions._process_invoices_to_send(invoices)
+                subscriptions._update_next_invoice_date()
+            return invoices
 
     def create_invoices(self):
         # Consolidación activada: agrupar SOLO por (company, currency, partner_invoice)
@@ -27,7 +81,9 @@ class SaleAdvancePaymentInvInherit(models.TransientModel):
             for so_group in groups.values():
                 # Usar contexto force_minimal_grouping para evitar errores de comparación
                 # cuando hay campos None (como subscription_id) en las claves de agrupación
-                moves |= so_group.with_context(force_minimal_grouping=True)._create_invoices(grouped=False, final=True)
+                moves |= self._create_invoices(
+                    so_group.with_context(force_minimal_grouping=True)
+                )
 
             return self.sale_order_ids.action_view_invoice(moves)
 
@@ -136,6 +192,27 @@ class SaleOrderInherit(models.Model):
             # SOLO estas llaves:
             return ['company_id', 'currency_id', 'partner_invoice_id']
         return super()._get_invoice_grouping_keys()
+
+    def _get_invoiceable_lines(self, final=False):
+        invoiceable_lines = super()._get_invoiceable_lines(final=final)
+        if not self.env.context.get('jh_allow_recurring_prepay'):
+            return invoiceable_lines
+
+        extra_lines = self.env['sale.order.line']
+        for order in self.filtered(lambda so: so.is_subscription and so.state in ('sale', 'done')):
+            if order.subscription_state in ('5_renewed', '6_churn'):
+                continue
+            extra_lines |= order.order_line.filtered(
+                lambda line: (
+                    not line.display_type
+                    and not line.is_downpayment
+                    and line.state == 'sale'
+                    and line.recurring_invoice
+                    and line.product_id
+                    and line.product_id.invoice_policy == 'order'
+                )
+            )
+        return invoiceable_lines | extra_lines
 
     def _jh_has_price_confirmation_gap(self):
         self.ensure_one()
@@ -818,6 +895,124 @@ class SaleOrderLineInherit(models.Model):
                                 # Usar write con contexto skip para evitar recursión
                                 line.with_context(skip_pricelist_recalc=True).write(update_vals)
         return res
+
+class SaleOrderLineAgentInherit(models.Model):
+    _inherit = "sale.order.line.agent"
+
+    commission_id = fields.Many2one(
+        comodel_name="commission",
+        ondelete="restrict",
+        required=True,
+        compute="_compute_commission_id",
+        store=True,
+        readonly=False,
+        copy=True,
+    )
+
+    z_commission_manual = fields.Boolean(
+        string="Manual commission",
+        default=False,
+        copy=True,
+        help="When enabled, keeps the commission selected manually by the user.",
+    )
+    z_manual_commission_id = fields.Many2one(
+        comodel_name="commission",
+        string="Manual commission value",
+        copy=True,
+        help="Stores the manual commission selected by the user.",
+    )
+
+    @api.depends("agent_id", "z_commission_manual", "z_manual_commission_id")
+    def _compute_commission_id(self):
+        """
+        Safe policy:
+        - Keep user-selected commission when it is marked as manual.
+        - Otherwise, use the agent default commission.
+        """
+        for record in self:
+            if not record.agent_id:
+                record.commission_id = False
+                continue
+            if record.z_commission_manual and record.z_manual_commission_id:
+                record.commission_id = record.z_manual_commission_id
+                continue
+            record.commission_id = record.agent_id.commission_id
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        # standard Odoo version "17"
+        for vals in vals_list:
+            if "commission_id" in vals:
+                manual_commission_id = vals.pop("commission_id")
+                if "z_commission_manual" not in vals:
+                    vals["z_commission_manual"] = bool(manual_commission_id)
+                if "z_manual_commission_id" not in vals and manual_commission_id:
+                    vals["z_manual_commission_id"] = manual_commission_id
+            elif "agent_id" in vals and "z_commission_manual" not in vals:
+                vals["z_commission_manual"] = False
+                vals["z_manual_commission_id"] = False
+        return super().create(vals_list)
+
+    def write(self, vals):
+        # standard Odoo version "17"
+        safe_vals = dict(vals)
+        if "commission_id" in safe_vals:
+            manual_commission_id = safe_vals.pop("commission_id")
+            if "z_commission_manual" not in safe_vals:
+                safe_vals["z_commission_manual"] = bool(manual_commission_id)
+            if "z_manual_commission_id" not in safe_vals and manual_commission_id:
+                safe_vals["z_manual_commission_id"] = manual_commission_id
+        elif "agent_id" in safe_vals and "commission_id" not in safe_vals:
+            safe_vals["z_commission_manual"] = False
+            safe_vals["z_manual_commission_id"] = False
+        return super().write(safe_vals)
+
+    @api.depends(
+        "commission_id",
+        "z_commission_manual",
+        "object_id.price_subtotal",
+        "object_id.product_id",
+        "object_id.product_uom_qty",
+    )
+    def _compute_amount(self):
+        """
+        Keep manual commission untouched and only auto-assign product/category
+        commission when the line is not marked as manual.
+        """
+        for line in self:
+            order_line = line.object_id
+            commission = line.commission_id
+
+            if (
+                not line.z_commission_manual
+                and order_line.product_id
+                and order_line.product_id.commission_ids.filtered(
+                    lambda c: c.agent_id.id == line.agent_id.id
+                )
+            ):
+                commission = order_line.product_id.commission_ids.filtered(
+                    lambda c: c.agent_id.id == line.agent_id.id
+                )[0].commission_id
+                line.commission_id = commission
+            elif (
+                not line.z_commission_manual
+                and order_line.product_id
+                and order_line.product_id.categ_id
+                and order_line.product_id.categ_id.commission_ids.filtered(
+                    lambda c: c.agent_id.id == line.agent_id.id
+                )
+            ):
+                commission = order_line.product_id.categ_id.commission_ids.filtered(
+                    lambda c: c.agent_id.id == line.agent_id.id
+                )[0].commission_id
+                line.commission_id = commission
+
+            line.amount = line._get_commission_amount(
+                commission,
+                order_line.price_subtotal,
+                order_line.product_id,
+                order_line.product_uom_qty,
+            )
 
 class AccountMoveSendInherit(models.TransientModel):
     _inherit = 'account.move.send'

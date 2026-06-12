@@ -12,7 +12,7 @@
     'license': 'LGPL-3',
 
     # Módulos requeridos
-    'depends': ['base', 'sale', 'mail', 'sale_subscription', 'commission', 'sale_commission', 'account', 'product', 'base_automation', 'purchase'],
+    'depends': ['base', 'sale', 'mail', 'sale_subscription', 'commission', 'sale_commission', 'commission_by_category', 'account', 'product', 'base_automation', 'purchase'],
 
     # Archivos cargados siempre (orden: jh_client_sheet antes de actions_jh_visit)
     'data': [
@@ -27,6 +27,7 @@
         'views/actions_jh_sales_subscription.xml',
         'views/actions_jh_res_partner.xml',
         'views/actions_jh_sale_order.xml',
+        'views/actions_jh_commission_visibility.xml',
         'views/actions_jh_commission_settlement_line.xml',
         'views/actions_jh_invoice_report_wizard.xml',
         'views/actions_jh_subscription_price_confirmation_wizard.xml',
