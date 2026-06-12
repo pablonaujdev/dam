@@ -943,11 +943,10 @@ class SaleOrderLineAgentInherit(models.Model):
         # standard Odoo version "17"
         for vals in vals_list:
             if "commission_id" in vals:
-                manual_commission_id = vals.pop("commission_id")
                 if "z_commission_manual" not in vals:
-                    vals["z_commission_manual"] = bool(manual_commission_id)
-                if "z_manual_commission_id" not in vals and manual_commission_id:
-                    vals["z_manual_commission_id"] = manual_commission_id
+                    vals["z_commission_manual"] = bool(vals.get("commission_id"))
+                if "z_manual_commission_id" not in vals and vals.get("commission_id"):
+                    vals["z_manual_commission_id"] = vals.get("commission_id")
             elif "agent_id" in vals and "z_commission_manual" not in vals:
                 vals["z_commission_manual"] = False
                 vals["z_manual_commission_id"] = False
@@ -957,11 +956,10 @@ class SaleOrderLineAgentInherit(models.Model):
         # standard Odoo version "17"
         safe_vals = dict(vals)
         if "commission_id" in safe_vals:
-            manual_commission_id = safe_vals.pop("commission_id")
             if "z_commission_manual" not in safe_vals:
-                safe_vals["z_commission_manual"] = bool(manual_commission_id)
-            if "z_manual_commission_id" not in safe_vals and manual_commission_id:
-                safe_vals["z_manual_commission_id"] = manual_commission_id
+                safe_vals["z_commission_manual"] = bool(safe_vals.get("commission_id"))
+            if "z_manual_commission_id" not in safe_vals and safe_vals.get("commission_id"):
+                safe_vals["z_manual_commission_id"] = safe_vals.get("commission_id")
         elif "agent_id" in safe_vals and "commission_id" not in safe_vals:
             safe_vals["z_commission_manual"] = False
             safe_vals["z_manual_commission_id"] = False
@@ -982,27 +980,30 @@ class SaleOrderLineAgentInherit(models.Model):
         for line in self:
             order_line = line.object_id
             commission = line.commission_id
+            product = order_line.product_id
 
             if (
                 not line.z_commission_manual
-                and order_line.product_id
-                and order_line.product_id.commission_ids.filtered(
+                and product
+                and "commission_ids" in product._fields
+                and product.commission_ids.filtered(
                     lambda c: c.agent_id.id == line.agent_id.id
                 )
             ):
-                commission = order_line.product_id.commission_ids.filtered(
+                commission = product.commission_ids.filtered(
                     lambda c: c.agent_id.id == line.agent_id.id
                 )[0].commission_id
                 line.commission_id = commission
             elif (
                 not line.z_commission_manual
-                and order_line.product_id
-                and order_line.product_id.categ_id
-                and order_line.product_id.categ_id.commission_ids.filtered(
+                and product
+                and product.categ_id
+                and "commission_ids" in product.categ_id._fields
+                and product.categ_id.commission_ids.filtered(
                     lambda c: c.agent_id.id == line.agent_id.id
                 )
             ):
-                commission = order_line.product_id.categ_id.commission_ids.filtered(
+                commission = product.categ_id.commission_ids.filtered(
                     lambda c: c.agent_id.id == line.agent_id.id
                 )[0].commission_id
                 line.commission_id = commission
@@ -1010,7 +1011,7 @@ class SaleOrderLineAgentInherit(models.Model):
             line.amount = line._get_commission_amount(
                 commission,
                 order_line.price_subtotal,
-                order_line.product_id,
+                product,
                 order_line.product_uom_qty,
             )
 
