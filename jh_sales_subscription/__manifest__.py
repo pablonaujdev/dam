@@ -8,7 +8,7 @@
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '0.1',
+    'version': '0.2',
     'license': 'LGPL-3',
 
     # Módulos requeridos

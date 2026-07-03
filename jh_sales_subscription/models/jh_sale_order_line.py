@@ -258,6 +258,37 @@ class SaleOrderInherit(models.Model):
         message_body = self._get_order_digest(origin=origin, lang=lang)
         return self._prepare_renew_upsell_order(subscription_state, message_body)
 
+    def _jh_get_lines_to_protect_when_clearing_plan(self, vals):
+        if 'plan_id' not in vals or vals.get('plan_id') or 'order_line' in vals:
+            return self.env['sale.order.line']
+
+        regular_orders = self.filtered(
+            lambda order: (
+                order.state in ('draft', 'sent')
+                and order.plan_id
+                and not order.subscription_id
+                and not order.order_line.filtered(lambda line: line.recurring_invoice)
+            )
+        )
+        return regular_orders.order_line.filtered(
+            lambda line: (
+                not line.display_type
+                and not line.is_downpayment
+                and line.product_id
+            )
+        )
+
+    def write(self, vals):
+        protected_lines = self._jh_get_lines_to_protect_when_clearing_plan(vals)
+        if protected_lines:
+            protected_fields = [
+                protected_lines._fields['price_unit'],
+                protected_lines._fields['discount'],
+            ]
+            with self.env.protecting(protected_fields, protected_lines):
+                return super().write(vals)
+        return super().write(vals)
+
     def prepare_renewal_order(self):
         self.ensure_one()
         if not self.env.context.get('skip_renewal_price_confirmation') and self._jh_has_price_confirmation_gap():
