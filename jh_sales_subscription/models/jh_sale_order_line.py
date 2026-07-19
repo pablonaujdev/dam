@@ -281,12 +281,14 @@ class SaleOrderInherit(models.Model):
     def write(self, vals):
         protected_lines = self._jh_get_lines_to_protect_when_clearing_plan(vals)
         if protected_lines:
+            write_vals = dict(vals)
+            write_vals.setdefault('subscription_state', False)
             protected_fields = [
                 protected_lines._fields['price_unit'],
                 protected_lines._fields['discount'],
             ]
             with self.env.protecting(protected_fields, protected_lines):
-                return super().write(vals)
+                return super().write(write_vals)
         return super().write(vals)
 
     def prepare_renewal_order(self):
