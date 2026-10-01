@@ -630,79 +630,31 @@ class SaleOrderInherit(models.Model):
         return super().create_invoices()
 
 
-    @api.depends('state', 'order_line.product_id', 'subscription_state')
+    @api.depends(
+        'state', 'subscription_state', 'order_line.invoice_status',
+        'order_line.invoice_lines.move_id.state', 'order_line.qty_invoiced',
+        'order_line.product_uom_qty', 'order_line.product_id',
+        'order_line.display_type', 'order_line.is_downpayment',
+    )
     def _compute_invoice_status(self):
-        today = fields.Date.today()
+        super()._compute_invoice_status()
         precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
-
-        for order in self.filtered(lambda o: not o.name.startswith('SO') and o.subscription_state != '5_renewed'):
-            # Excluir órdenes canceladas o suscripciones churn
-            if order.state not in ('sale', 'done') or order.subscription_state == '6_churn':
+        for order in self:
+            if order.subscription_state == '6_churn':
                 order.invoice_status = 'no'
                 continue
-
-            # Filtrar solo líneas con producto real
-            lineas_facturables = order.order_line.filtered(lambda l: l.product_id)
-
-            if not lineas_facturables:
-                order.invoice_status = 'no'
+            if order.state != 'sale' or order.invoice_status != 'no':
                 continue
-
-            # Si no hay facturas asociadas
-            if not order.invoice_ids:
-                order.invoice_status = 'to invoice'
+            lines = order.order_line.filtered(
+                lambda line: line.product_id and not line.display_type and not line.is_downpayment
+            )
+            if not lines or not lines.invoice_lines.move_id.filtered(lambda invoice: invoice.state == 'posted'):
                 continue
-
-            # Obtener productos de la orden
-            producto_ids = lineas_facturables.mapped('product_id')
-            fecha_inicio = order.date_order.date()
-            fecha_limite = fecha_inicio + relativedelta(years=1)
-
-            # Buscar facturas posteadas del cliente en el rango
-            facturas_cliente = self.env['account.move'].search([
-                ('partner_id', '=', order.partner_id.id),
-                ('state', '=', 'posted'),
-                ('move_type', '=', 'out_invoice'),
-                ('invoice_date', '>=', fecha_inicio),
-                ('invoice_date', '<=', fecha_limite)
-            ])
-
-            # Extraer productos facturados
-            productos_facturados = set()
-            for factura in facturas_cliente:
-                for linea in factura.invoice_line_ids:
-                    if linea.product_id:
-                        productos_facturados.add(linea.product_id.id)
-
-            # Validar si todos los productos de la orden están facturados
-            if set(producto_ids.ids).issubset(productos_facturados):
+            if all(
+                float_compare(line.qty_invoiced, line.product_uom_qty, precision_digits=precision) >= 0
+                for line in lines
+            ):
                 order.invoice_status = 'invoiced'
-                continue
-
-            # Validación por suscripción activa
-            if order.is_subscription and order.next_invoice_date and order.start_date:
-                if today >= order.start_date and today >= order.next_invoice_date:
-                    facturas_actuales = order.invoice_ids.filtered(
-                        lambda i: i.state == 'posted' and i.invoice_date >= order.next_invoice_date
-                    )
-                    if not facturas_actuales:
-                        order.invoice_status = 'to invoice'
-                        continue
-
-            # Validación por monto total facturado
-            total_facturado = sum(order.invoice_ids.filtered(lambda i: i.state == 'posted').mapped('amount_total'))
-            if float_compare(total_facturado, order.amount_total, precision_digits=2) >= 0:
-                order.invoice_status = 'invoiced'
-                continue
-
-            # Si hay productos no facturados, marcar como 'to invoice'
-            productos_pendientes = producto_ids.filtered(lambda p: p.id not in productos_facturados)
-            if productos_pendientes:
-                order.invoice_status = 'to invoice'
-                continue
-
-            # Si nada aplica, marcar como no facturable
-            order.invoice_status = 'no'
 
 
     def _was_product_already_invoiced(self):

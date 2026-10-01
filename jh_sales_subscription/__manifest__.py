@@ -12,6 +12,7 @@
         - models/jh_partner_subscription.py y vistas de contactos: suscripciones por dirección de entrega.
         - views/jh_sale_subscription_views.xml: búsqueda de licencias por cliente donde está.
         - models/jh_invoice_report_wizard.py: filtros del Excel por categoría y tipo de cliente.
+        - models/jh_sale_order_line.py: estado de facturación según líneas y facturas vinculadas.
 
         Lógica funcional:
         La tarifa recalcula los valores automáticos, mientras los valores negociados
@@ -19,11 +20,12 @@
         Las direcciones de entrega muestran sus suscripciones en curso en la ficha y el kanban.
         La lista de licencias permite buscar por su dirección de entrega.
         El Excel de facturas admite categorías de producto y facturas de clientes o proveedores.
+        El estado de facturación usa las líneas del pedido, también en renovaciones.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '17.0.0.7.0',
+    'version': '17.0.0.7.1',
     'license': 'LGPL-3',
 
     # Módulos requeridos
