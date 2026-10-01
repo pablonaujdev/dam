@@ -10,20 +10,22 @@
         - models/jh_sale_order_line.py: sale.order y sale.order.line.
         - write de sale.order.line protege precio y descuento manuales al cambiar la cantidad.
         - models/jh_partner_subscription.py y vistas de contactos: suscripciones por dirección de entrega.
+        - views/jh_sale_subscription_views.xml: búsqueda de licencias por cliente donde está.
 
         Lógica funcional:
         La tarifa recalcula los valores automáticos, mientras los valores negociados
         permanecen en el pedido y se trasladan a la factura.
         Las direcciones de entrega muestran sus suscripciones en curso en la ficha y el kanban.
+        La lista de licencias permite buscar por su dirección de entrega.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '17.0.0.5.0',
+    'version': '17.0.0.6.0',
     'license': 'LGPL-3',
 
     # Módulos requeridos
-    'depends': ['base', 'sale', 'mail', 'sale_subscription', 'commission', 'sale_commission', 'commission_by_category', 'account', 'product', 'base_automation', 'purchase'],
+    'depends': ['base', 'sale', 'mail', 'sale_subscription', 'miac_line_subscription', 'commission', 'sale_commission', 'commission_by_category', 'account', 'product', 'base_automation', 'purchase'],
 
     # Archivos cargados siempre (orden: jh_client_sheet antes de actions_jh_visit)
     'data': [

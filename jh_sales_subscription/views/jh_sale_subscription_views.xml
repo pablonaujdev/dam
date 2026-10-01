@@ -14,4 +14,21 @@
             </xpath>
         </field>
     </record>
+
+    <record id="jh_sale_order_line_subscription_search" model="ir.ui.view">
+        <field name="name">sale.order.line.subscription.search.jh</field>
+        <field name="model">sale.order.line</field>
+        <field name="inherit_id" ref="sale.view_sales_order_line_filter"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='order_partner_id']" position="after">
+                <field name="partner_id" string="Cliente donde está"
+                       filter_domain="[('order_id.partner_shipping_id', 'ilike', self)]"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="miac_line_subscription.sale_subscription_lines_action" model="ir.actions.act_window">
+        <field name="search_view_id" ref="jh_sale_order_line_subscription_search"/>
+    </record>
 </odoo>
