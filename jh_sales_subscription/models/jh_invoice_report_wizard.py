@@ -27,8 +27,8 @@ class jh_invoice_report_wizard(models.TransientModel):
     # Filtros adicionales
     partner_ids = fields.Many2many(
         'res.partner',
-        string='Clientes',
-        domain=[('customer_rank', '>', 0)]
+        string='Clientes/Proveedores',
+        domain=['|', ('customer_rank', '>', 0), ('supplier_rank', '>', 0)]
     )
 
     company_ids = fields.Many2many(
@@ -41,6 +41,20 @@ class jh_invoice_report_wizard(models.TransientModel):
         'product.product',
         string='Productos'
     )
+
+    product_categ_ids = fields.Many2many(
+        'product.category',
+        string='Categorías de producto',
+        help=('Filtra las líneas de factura por las categorías de sus productos.\n'
+              'Incluye los productos de las subcategorías seleccionadas.')
+    )
+
+    partner_type = fields.Selection([
+        ('customer', 'Clientes'),
+        ('supplier', 'Proveedores'),
+    ], string='Tipo de cliente',
+        help=('Filtra el reporte según el sentido de la factura.\n'
+              'Opciones: customer (Clientes, ventas), supplier (Proveedores, compras).'))
 
     state = fields.Selection([
         ('draft', 'Borrador'),
@@ -135,6 +149,14 @@ class jh_invoice_report_wizard(models.TransientModel):
 
         if self.product_ids:
             domain.append(('product_id', 'in', self.product_ids.ids))
+
+        if self.product_categ_ids:
+            domain.append(('product_categ_id', 'child_of', self.product_categ_ids.ids))
+
+        if self.partner_type == 'customer':
+            domain.append(('move_type', 'in', ('out_invoice', 'out_refund', 'out_receipt')))
+        elif self.partner_type == 'supplier':
+            domain.append(('move_type', 'in', ('in_invoice', 'in_refund', 'in_receipt')))
 
         if self.state:
             domain.append(('state', '=', self.state))

@@ -20,6 +20,8 @@
                         <field name="partner_ids" widget="many2many_tags" options="{'no_create': True}"/>
                         <field name="company_ids" widget="many2many_tags" groups="base.group_multi_company"/>
                         <field name="product_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                        <field name="product_categ_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                        <field name="partner_type"/>
                         <field name="agents_ids" widget="many2many_tags" options="{'no_create': True}"/>
                         <field name="state"/>
                         <field name="move_type"/>
