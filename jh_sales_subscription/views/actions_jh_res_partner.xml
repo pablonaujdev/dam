@@ -40,5 +40,60 @@
             </field>
         </record>
 
+        <record id="jh_res_partner_delivery_subscription_form" model="ir.ui.view">
+            <field name="name">res.partner.delivery.subscription.form</field>
+            <field name="model">res.partner</field>
+            <field name="inherit_id" ref="base.view_partner_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//div[@name='button_box']" position="inside">
+                    <button name="action_view_jh_delivery_subscriptions" type="object"
+                            class="oe_stat_button" icon="fa-refresh"
+                            groups="sales_team.group_sale_salesman"
+                            invisible="type != 'delivery' or jh_delivery_subscription_count == 0">
+                        <field name="jh_delivery_subscription_count" widget="statinfo"
+                               string="Suscripciones en esta dirección"/>
+                    </button>
+                </xpath>
+                <xpath expr="//field[@name='child_ids']/kanban/field[@name='type']" position="after">
+                    <field name="jh_delivery_subscription_count"/>
+                </xpath>
+                <xpath expr="//field[@name='child_ids']/kanban/templates/t[@t-name='kanban-box']//div[hasclass('oe_kanban_details')]" position="inside">
+                    <a t-if="record.type.raw_value == 'delivery' and record.jh_delivery_subscription_count.raw_value"
+                       data-type="object" data-name="action_view_jh_delivery_subscriptions"
+                       groups="sales_team.group_sale_salesman" href="#"
+                       class="oe_kanban_action oe_kanban_action_a me-1"
+                       title="Suscripciones activas en esta dirección">
+                        <span class="badge rounded-pill">
+                            <i class="fa fa-fw fa-refresh" role="img" aria-label="Suscripciones activas"/>
+                            <t t-out="record.jh_delivery_subscription_count.value"/>
+                        </span>
+                    </a>
+                </xpath>
+            </field>
+        </record>
+
+        <record id="jh_res_partner_delivery_subscription_kanban" model="ir.ui.view">
+            <field name="name">res.partner.delivery.subscription.kanban</field>
+            <field name="model">res.partner</field>
+            <field name="inherit_id" ref="base.res_partner_kanban_view"/>
+            <field name="arch" type="xml">
+                <xpath expr="//kanban/field[@name='type']" position="after">
+                    <field name="jh_delivery_subscription_count"/>
+                </xpath>
+                <xpath expr="//div[hasclass('oe_kanban_bottom_left')]" position="inside">
+                    <a t-if="record.type.raw_value == 'delivery' and record.jh_delivery_subscription_count.raw_value"
+                       data-type="object" data-name="action_view_jh_delivery_subscriptions"
+                       groups="sales_team.group_sale_salesman" href="#"
+                       class="oe_kanban_action oe_kanban_action_a me-1"
+                       title="Suscripciones activas en esta dirección">
+                        <span class="badge rounded-pill">
+                            <i class="fa fa-fw fa-refresh" role="img" aria-label="Suscripciones activas"/>
+                            <t t-out="record.jh_delivery_subscription_count.value"/>
+                        </span>
+                    </a>
+                </xpath>
+            </field>
+        </record>
+
     </data>
 </odoo>

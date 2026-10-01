@@ -9,15 +9,17 @@
         Estructura técnica:
         - models/jh_sale_order_line.py: sale.order y sale.order.line.
         - write de sale.order.line protege precio y descuento manuales al cambiar la cantidad.
+        - models/jh_partner_subscription.py y vistas de contactos: suscripciones por dirección de entrega.
 
         Lógica funcional:
         La tarifa recalcula los valores automáticos, mientras los valores negociados
         permanecen en el pedido y se trasladan a la factura.
+        Las direcciones de entrega muestran sus suscripciones en curso en la ficha y el kanban.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '17.0.0.4',
+    'version': '17.0.0.5.0',
     'license': 'LGPL-3',
 
     # Módulos requeridos
