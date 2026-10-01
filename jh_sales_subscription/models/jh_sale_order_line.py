@@ -4,6 +4,7 @@ from odoo.tools.float_utils import float_compare
 from dateutil.relativedelta import relativedelta
 from odoo.tools.float_utils import float_compare, float_round
 from collections import defaultdict
+from contextlib import ExitStack
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -891,8 +892,29 @@ class SaleOrderLineInherit(models.Model):
         # Detectar si se están modificando manualmente precio o descuento
         is_manual_price_change = 'price_unit' in vals
         is_manual_discount_change = 'discount' in vals
-        
-        res = super().write(vals)
+
+        manual_price_lines = self.env['sale.order.line']
+        manual_discount_lines = self.env['sale.order.line']
+        if 'product_uom_qty' in vals and 'product_id' not in vals and 'product_uom' not in vals:
+            for line in self.filtered(lambda l: l.product_id and not l.display_type and not l.is_downpayment):
+                tariff_vals = line._get_pricelist_reprice_vals()
+                if not is_manual_price_change and 'price_unit' in tariff_vals and float_compare(
+                    line.price_unit, tariff_vals['price_unit'], precision_digits=6,
+                ) != 0:
+                    manual_price_lines |= line
+                if not is_manual_discount_change and 'discount' in tariff_vals and float_compare(
+                    line.discount, tariff_vals['discount'], precision_digits=2,
+                ) != 0:
+                    manual_discount_lines |= line
+
+        # Odoo recalcula estos campos durante el write de cantidad. Proteger los
+        # valores negociados antes del recálculo evita perderlos en ese momento.
+        with ExitStack() as stack:
+            if manual_price_lines:
+                stack.enter_context(self.env.protecting([self._fields['price_unit']], manual_price_lines))
+            if manual_discount_lines:
+                stack.enter_context(self.env.protecting([self._fields['discount']], manual_discount_lines))
+            res = super().write(vals)
         
         # Solo recalcular precios si se cambia producto, UOM o cantidad
         # Y NO si el usuario está modificando manualmente precio_unit o discount
@@ -915,13 +937,18 @@ class SaleOrderLineInherit(models.Model):
                             
                             # Solo actualizar precio si es 0 o es el valor por defecto del producto
                             if 'price_unit' in vals2:
-                                if float_compare(current_price, 0.0, precision_digits=6) == 0 or \
-                                   (default_price > 0 and float_compare(current_price, default_price, precision_digits=6) == 0):
+                                is_default_price = (
+                                    float_compare(current_price, 0.0, precision_digits=6) == 0
+                                    or (default_price > 0 and float_compare(
+                                        current_price, default_price, precision_digits=6,
+                                    ) == 0)
+                                )
+                                if line not in manual_price_lines and is_default_price:
                                     update_vals['price_unit'] = vals2['price_unit']
                             
                             # Solo actualizar descuento si es 0
                             if 'discount' in vals2:
-                                if float_compare(current_discount, 0.0, precision_digits=2) == 0:
+                                if line not in manual_discount_lines and float_compare(current_discount, 0.0, precision_digits=2) == 0:
                                     update_vals['discount'] = vals2['discount']
                             
                             if update_vals:

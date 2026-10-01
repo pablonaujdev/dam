@@ -3,12 +3,21 @@
     'name': "Personalizaciones MIAC - DAM",
     'summary': "Notificación de suscripciones próximas a vencer",
     'description': """
-        Notificación automática de suscripciones próximas a vencer por correo electrónico.
+        Gestiona personalizaciones comerciales y de suscripciones de MIAC.
+        Conserva las condiciones negociadas de precio y descuento en los pedidos.
+
+        Estructura técnica:
+        - models/jh_sale_order_line.py: sale.order y sale.order.line.
+        - write de sale.order.line protege precio y descuento manuales al cambiar la cantidad.
+
+        Lógica funcional:
+        La tarifa recalcula los valores automáticos, mientras los valores negociados
+        permanecen en el pedido y se trasladan a la factura.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '0.3',
+    'version': '17.0.0.4',
     'license': 'LGPL-3',
 
     # Módulos requeridos
