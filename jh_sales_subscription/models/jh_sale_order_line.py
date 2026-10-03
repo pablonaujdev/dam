@@ -1,6 +1,6 @@
 from odoo import models, api, fields, _
 from odoo.exceptions import UserError
-from odoo.tools.float_utils import float_compare
+from odoo.tools.float_utils import float_compare, float_is_zero
 from dateutil.relativedelta import relativedelta
 from odoo.tools.float_utils import float_compare, float_round
 from collections import defaultdict
@@ -635,7 +635,12 @@ class SaleOrderInherit(models.Model):
         'order_line.invoice_lines.move_id.state', 'order_line.qty_invoiced',
         'order_line.product_uom_qty', 'order_line.product_id',
         'order_line.display_type', 'order_line.is_downpayment',
-        'order_line.recurring_invoice',
+        'order_line.recurring_invoice', 'order_line.qty_to_invoice',
+        'order_line.invoice_lines.quantity', 'order_line.invoice_lines.product_uom_id',
+        'order_line.invoice_lines.move_id.move_type',
+        'order_line.invoice_lines.deferred_start_date',
+        'order_line.invoice_lines.deferred_end_date', 'order_line.product_uom',
+        'next_invoice_date', 'plan_id.billing_period_value', 'plan_id.billing_period_unit',
     )
     def _compute_invoice_status(self):
         super()._compute_invoice_status()
@@ -654,23 +659,34 @@ class SaleOrderInherit(models.Model):
                 if pending_lines and all(line.recurring_invoice for line in pending_lines):
                     order.invoice_status = 'no'
                 continue
-            if order.state != 'sale' or order.invoice_status != 'no':
+            if order.state != 'sale' or order.invoice_status not in ('no', 'to invoice'):
                 continue
             lines = order.order_line.filtered(
                 lambda line: line.product_id and not line.display_type and not line.is_downpayment
             )
             if not lines or not lines.invoice_lines.move_id.filtered(lambda invoice: invoice.state == 'posted'):
                 continue
-            if all(
+            fully_invoiced = all(
                 float_compare(line.qty_invoiced, line.product_uom_qty, precision_digits=precision) >= 0
                 for line in lines
-            ):
+            )
+            if order.invoice_status == 'to invoice':
+                fully_invoiced = fully_invoiced and all(
+                    float_is_zero(line.qty_to_invoice, precision_digits=precision)
+                    and (
+                        float_is_zero(line.product_uom_qty, precision_digits=precision)
+                        or line._jh_has_posted_invoice_coverage(precision)
+                    )
+                    for line in lines
+                )
+            if fully_invoiced:
                 order.invoice_status = 'invoiced'
 
     @api.model
-    def _cron_recalcular_invoice_status(self):
+    def _cron_recalcular_invoice_status(self, only_pending=False):
         """Actualizar primero las líneas, sin alterar cantidades ni períodos."""
-        order_ids = self.search([], order='id').ids
+        domain = [('invoice_status', '=', 'to invoice')] if only_pending else []
+        order_ids = self.search(domain, order='id').ids
         changed_orders = 0
         changed_lines = 0
         for start in range(0, len(order_ids), 200):
@@ -731,6 +747,60 @@ class SaleOrderInherit(models.Model):
 
 class SaleOrderLineInherit(models.Model):
     _inherit = 'sale.order.line'
+
+    def _jh_has_posted_invoice_coverage(self, precision):
+        """Comprobar la cantidad neta contabilizada para el período de la línea."""
+        self.ensure_one()
+        if (
+            not float_is_zero(self.qty_to_invoice, precision_digits=precision)
+            or float_compare(self.qty_invoiced, self.product_uom_qty, precision_digits=precision) < 0
+        ):
+            return False
+        invoice_lines = self.invoice_lines.filtered(
+            lambda line: line.move_id.state == 'posted'
+            and line.move_id.move_type in ('out_invoice', 'out_refund')
+        )
+        if self.recurring_invoice:
+            order = self.order_id
+            if not order.next_invoice_date or not order.plan_id:
+                return False
+            period_start = order.next_invoice_date - order.plan_id.billing_period
+            period_end = order.next_invoice_date - relativedelta(days=1)
+            # Mismo período que sale_subscription, usando solo documentos contabilizados.
+            invoice_lines = invoice_lines.filtered(
+                lambda line: line.deferred_start_date and line.deferred_end_date
+                and period_start <= line.deferred_start_date <= period_end
+                and line.deferred_end_date == period_end
+            )
+        if not invoice_lines.filtered(lambda line: line.move_id.move_type == 'out_invoice'):
+            return False
+        quantity = sum(
+            (1 if line.move_id.move_type == 'out_invoice' else -1)
+            * line.product_uom_id._compute_quantity(line.quantity, self.product_uom)
+            for line in invoice_lines
+        )
+        return float_compare(quantity, self.product_uom_qty, precision_digits=precision) >= 0
+
+    @api.depends(
+        'qty_to_invoice', 'qty_invoiced', 'product_uom_qty', 'product_uom',
+        'recurring_invoice', 'invoice_lines.move_id.state', 'invoice_lines.move_id.move_type',
+        'invoice_lines.quantity', 'invoice_lines.product_uom_id',
+        'invoice_lines.deferred_start_date', 'invoice_lines.deferred_end_date',
+        'order_id.next_invoice_date', 'order_id.plan_id.billing_period_value',
+        'order_id.plan_id.billing_period_unit',
+    )
+    def _compute_invoice_status(self):
+        super()._compute_invoice_status()
+        if self.env.context.get('skip_line_status_compute'):
+            return
+        precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
+        for line in self:
+            if (
+                line.state == 'sale' and line.invoice_status == 'to invoice'
+                and not line.display_type and not line.is_downpayment
+                and line._jh_has_posted_invoice_coverage(precision)
+            ):
+                line.invoice_status = 'invoiced'
 
     def _prepare_invoice_line(self, **optional_values):
         """

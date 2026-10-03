@@ -23,11 +23,14 @@
         El estado de facturación usa las líneas del pedido, también en renovaciones.
         El recálculo actualiza primero el estado de las líneas, sin modificar cantidades
         ni períodos, y respeta el cierre de las líneas recurrentes ya renovadas.
+        Corrige estados pendientes con cantidad cero únicamente cuando las facturas
+        contabilizadas cubren la cantidad neta y el período, descontando rectificativas.
+        Permite limitar el recálculo a los pedidos que actualmente están a facturar.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '17.0.0.7.2',
+    'version': '17.0.0.7.3',
     'license': 'LGPL-3',
 
     # Módulos requeridos
