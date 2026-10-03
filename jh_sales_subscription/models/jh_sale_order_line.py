@@ -635,6 +635,7 @@ class SaleOrderInherit(models.Model):
         'order_line.invoice_lines.move_id.state', 'order_line.qty_invoiced',
         'order_line.product_uom_qty', 'order_line.product_id',
         'order_line.display_type', 'order_line.is_downpayment',
+        'order_line.recurring_invoice',
     )
     def _compute_invoice_status(self):
         super()._compute_invoice_status()
@@ -642,6 +643,16 @@ class SaleOrderInherit(models.Model):
         for order in self:
             if order.subscription_state == '6_churn':
                 order.invoice_status = 'no'
+                continue
+            if order.subscription_state == '5_renewed' and order.invoice_status == 'to invoice':
+                pending_lines = order.order_line.filtered(
+                    lambda line: not line.display_type and not line.is_downpayment
+                    and line.invoice_status == 'to invoice'
+                )
+                # La renovación cierra la recurrencia del contrato anterior.
+                # Las líneas no recurrentes conservan su facturación normal.
+                if pending_lines and all(line.recurring_invoice for line in pending_lines):
+                    order.invoice_status = 'no'
                 continue
             if order.state != 'sale' or order.invoice_status != 'no':
                 continue
@@ -655,6 +666,42 @@ class SaleOrderInherit(models.Model):
                 for line in lines
             ):
                 order.invoice_status = 'invoiced'
+
+    @api.model
+    def _cron_recalcular_invoice_status(self):
+        """Actualizar primero las líneas, sin alterar cantidades ni períodos."""
+        order_ids = self.search([], order='id').ids
+        changed_orders = 0
+        changed_lines = 0
+        for start in range(0, len(order_ids), 200):
+            orders = self.browse(order_ids[start:start + 200])
+            lines = orders.order_line
+            previous_orders = {order.id: order.invoice_status for order in orders}
+            previous_lines = {line.id: line.invoice_status for line in lines}
+
+            self.env.add_to_compute(lines._fields['invoice_status'], lines)
+            lines._recompute_recordset(['invoice_status'])
+            self.env.add_to_compute(self._fields['invoice_status'], orders)
+            orders._recompute_recordset(['invoice_status'])
+
+            changed_lines += sum(
+                previous_lines[line.id] != line.invoice_status for line in lines
+            )
+            for order in orders:
+                previous_status = previous_orders[order.id]
+                if previous_status != order.invoice_status:
+                    changed_orders += 1
+                    _logger.info(
+                        'Estado de facturación corregido %s: %s -> %s',
+                        order.name, previous_status, order.invoice_status,
+                    )
+        result = {
+            'orders_checked': len(order_ids),
+            'orders_changed': changed_orders,
+            'lines_changed': changed_lines,
+        }
+        _logger.info('Recálculo de estados de facturación: %s', result)
+        return result
 
 
     def _was_product_already_invoiced(self):

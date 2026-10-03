@@ -21,11 +21,13 @@
         La lista de licencias permite buscar por su dirección de entrega.
         El Excel de facturas admite categorías de producto y facturas de clientes o proveedores.
         El estado de facturación usa las líneas del pedido, también en renovaciones.
+        El recálculo actualiza primero el estado de las líneas, sin modificar cantidades
+        ni períodos, y respeta el cierre de las líneas recurrentes ya renovadas.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '17.0.0.7.1',
+    'version': '17.0.0.7.2',
     'license': 'LGPL-3',
 
     # Módulos requeridos
