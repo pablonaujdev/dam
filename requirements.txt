@@ -1,0 +1,8 @@
+# Odoo 19: librerias externas para los tres modulos del hito 1 y sus dependencias OCA.
+# Instalar en el entorno Python del servidor Odoo 19 de destino.
+pycountry
+xmlsig
+Unidecode
+schwifty==2024.4.0
+xlsxwriter
+xlrd
