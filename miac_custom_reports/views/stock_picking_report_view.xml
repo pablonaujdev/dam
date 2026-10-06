@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<odoo>
+    <data>
+
+        <template id="report_delivery_document_miac" inherit_id="sale_stock.report_delivery_document_inherit_sale_stock" priority="160">
+            <xpath expr="//div[@name='outgoing_delivery_address']/div" position="attributes"><attribute name="t-options">{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}</attribute></xpath><xpath expr="//div[@t-if='not o.signature']" position="before">
+                <div id="notes_print" class="oe_structure">
+                    <p t-field="o.notes_print"/>
+                </div>
+            </xpath>
+            <xpath expr="//div[@t-if='o.sudo().sale_id.client_order_ref']" position="replace">
+                <div class="col-auto justify-content-end" t-if="o.client_ref">
+                    <strong>Customer Reference:</strong>
+                    <p t-field="o.client_ref">Customer reference</p>
+                </div>
+                <div class="col-auto justify-content-end" t-if="o.supplier_ref">
+                    <strong>Supplier Reference:</strong>
+                    <p t-field="o.supplier_ref">Customer reference</p>
+                </div>
+            </xpath>
+        </template>
+
+    </data>
+</odoo>

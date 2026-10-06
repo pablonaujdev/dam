@@ -1,0 +1,56 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<odoo>
+  <template id="report_saleorder_document_miac" inherit_id="sale.report_saleorder_document" priority="160">
+    <xpath expr="//t[@t-set='information_block']/.." position="replace"/>
+    <xpath expr="//t[@t-set='address']" position="replace">
+      <t t-set="address">
+        <strong>Shipping Address:</strong>
+        <div t-field="doc.partner_shipping_id" t-options="{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}"/>
+      </t>
+      <t t-set="information_block">
+        <strong>Invoicing Address:</strong>
+        <div t-field="doc.partner_invoice_id" t-options="{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}"/>
+        <p t-if="doc.partner_invoice_id.vat"><span t-field="doc.partner_invoice_id.vat"/></p>
+      </t>
+    </xpath>
+    <xpath expr="//div[@t-field='doc.user_id']/.." position="replace">
+      <div t-if="doc.create_uid.name" class="col">
+        <strong>Salesperson:</strong>
+        <div t-field="doc.create_uid"/>
+        <p t-if="doc.create_uid.partner_id.phone">Tlf: <span t-field="doc.create_uid.partner_id.phone"/></p>
+      </div>
+    </xpath>
+    <xpath expr="//t[@t-set='layout_document_title']/span[@t-elif]" position="replace">
+      <span t-elif="doc.state in ['draft', 'sent']">Offer # </span>
+    </xpath>
+    <xpath expr="//t[@t-set='display_taxes']" position="attributes"><attribute name="t-value">False</attribute></xpath>
+    <xpath expr="//th[@name='th_quantity']" position="after"><th name="th_lot" class="text-end">Lot/Num Serie</th></xpath>
+    <xpath expr="//td[@name='td_product_quantity']" position="after"><td name="td_lot" class="text-end"><span t-field="line.lot_id"/></td></xpath>
+    <xpath expr="//td[@name='td_section_group_quantity']" position="after"><td name="td_lot_grouped"/></xpath>
+    <xpath expr="//td[@name='td_product_subtotal']" position="attributes"><attribute name="t-if">True</attribute></xpath>
+    <xpath expr="//td[@name='td_product_subtotal']/t" position="attributes"><attribute name="t-if">not collapse_prices and not line.is_downpayment</attribute></xpath>
+    <xpath expr="//t[@t-set='section_name_colspan'][@t-value!='99']" position="attributes"><attribute name="t-value">4 + (1 if display_discount else 0)</attribute></xpath>
+    <xpath expr="//td[@name='td_combo_name']" position="attributes"><attribute name="t-att-colspan">4 + (1 if display_discount else 0)</attribute></xpath>
+<xpath expr="//p[@t-if='not is_html_empty(doc.payment_term_id.note)']" position="after">
+                <t t-if="doc.payment_mode_id and doc.payment_mode_id.show_bank_account != 'no'">
+                    <p t-foreach="doc.partner_banks_to_show()" t-as="partner_bank">
+                        <t t-set="bank_chars" t-value="max(0, min(doc.payment_mode_id.show_bank_account_chars, len(partner_bank.acc_number)))"/>
+                        <strong>Bank Account:</strong>
+                        <t t-if="partner_bank.bank_id">
+                            <t t-esc="partner_bank.bank_id.name + ('' if not partner_bank.bank_id.bic else ' (' + partner_bank.bank_id.bic + ')')"/>
+                        </t>
+                        <t t-if="doc.payment_mode_id.show_bank_account == 'full'">
+                            <span t-field="partner_bank.acc_number"/>
+                        </t>
+                        <t t-elif="doc.payment_mode_id.show_bank_account == 'first'">
+                            <span t-esc="partner_bank.acc_number[:bank_chars] + '*' * (len(partner_bank.acc_number) - bank_chars)"/>
+                        </t>
+                        <t t-elif="doc.payment_mode_id.show_bank_account == 'last'">
+                            <span t-esc="'*' * (len(partner_bank.acc_number) - bank_chars) + (partner_bank.acc_number[-bank_chars:] if bank_chars else '')"/>
+                        </t>
+                    </p>
+                </t>
+            </xpath>
+        
+  </template>
+</odoo>

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<odoo>
+  <template id="report_purchaseorder_document_miac" inherit_id="purchase.report_purchaseorder_document" priority="160">
+    <xpath expr="//t[@t-set='address']/div" position="before"><strong>Supplier Address:</strong></xpath>
+    <xpath expr="//t[@t-set='information_block']/strong" position="replace"><strong>Shipping Address:</strong></xpath><xpath expr="//t[@t-else='']/t[@t-set='information_block']/strong" position="replace"><strong>Shipping Address:</strong></xpath><xpath expr="//th[@name='th_taxes']" position="replace"/>
+    <xpath expr="//td[span[@t-out=&quot;', '.join(tax.tax_label for tax in line.tax_ids if tax.tax_label)&quot;]]" position="replace"/>
+    <xpath expr="//th[@name='th_description']" position="before"><th name="th_ref"><strong>Ref</strong></th></xpath>
+    <xpath expr="//td[@id='product']" position="before"><td name="td_ref"><span t-field="line.product_id.default_code"/></td></xpath>
+  </template>
+</odoo>

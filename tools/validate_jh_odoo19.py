@@ -10,11 +10,12 @@ import json
 import sys
 from lxml import etree
 
-CUSTOM = ('sale_purchase_lot', 'commission_by_category', 'miac_renovation_subscription', 'miac_line_subscription', 'jh_sales_subscription')
+CUSTOM = ('sale_purchase_lot', 'commission_by_category', 'miac_renovation_subscription', 'miac_line_subscription', 'jh_sales_subscription', 'account_payment_sale', 'miac_custom_reports')
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--odoo-server', default=r'C:\Program Files\Odoo 19.0e.20260105\server')
+    parser.add_argument('--module', default='jh_sales_subscription')
     args = parser.parse_args()
     root = pathlib.Path(__file__).resolve().parents[1]
     server = pathlib.Path(args.odoo_server)
@@ -36,10 +37,12 @@ def main():
         for dep in manifest.get('depends', []):
             visit(dep)
         graph.append(module)
-    visit('jh_sales_subscription')
+    visit(args.module)
     lock = json.loads((root / 'docs' / 'OCA_COMMISSION_19.lock.json').read_text(encoding='utf-8'))
     assert lock['commit'] == '74fcdc06111c6271faf12fb3c2e692da076271c2'
     for module, entry in lock['modules'].items():
+        if module not in paths:
+            continue
         assert manifests[module]['version'] == entry['version']
         for relative, digest in entry['files_sha256'].items():
             assert hashlib.sha256((paths[module] / relative).read_bytes()).hexdigest() == digest, module + '/' + relative
@@ -99,6 +102,10 @@ def main():
             if file.suffix != '.xml':
                 continue
             tree = etree.parse(str(file))
+            # Odoo resolves local and qualified action interpolation to the same ID.
+            for element in tree.iter():
+                for attribute, value in list(element.attrib.items()):
+                    element.set(attribute, re.sub(r'%\(([^)]+)\)d', lambda match: '%(' + (match[1] if '.' in match[1] else module + '.' + match[1]) + ')d', value))
             if module in CUSTOM:
                 xml_count += 1
                 if not schema.validate(tree):

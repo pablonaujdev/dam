@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<odoo>
+  <template id="report_invoice_document_miac" inherit_id="account.report_invoice_document" priority="160">
+    <xpath expr="//div[@name='no_shipping']//address[@t-field='o.partner_id']" position="before"><strong>Fiscal Address:</strong></xpath><xpath expr="//div[@name='no_shipping']//address[@t-field='o.partner_id']" position="attributes"><attribute name="t-options">{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}</attribute></xpath><xpath expr="//div[@name='address_same_as_shipping']//address[@t-field='o.partner_id']" position="before"><strong>Fiscal Address:</strong></xpath><xpath expr="//div[@name='address_same_as_shipping']//address[@t-field='o.partner_id']" position="attributes"><attribute name="t-options">{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}</attribute></xpath><xpath expr="//div[@name='address_not_same_as_shipping']//address[@t-field='o.partner_id']" position="before"><strong>Fiscal Address:</strong></xpath><xpath expr="//div[@name='address_not_same_as_shipping']//address[@t-field='o.partner_id']" position="attributes"><attribute name="t-options">{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}</attribute></xpath><xpath expr="//div[@name='shipping_address_block']/div[@t-field='o.partner_shipping_id']" position="attributes"><attribute name="t-options">{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}</attribute></xpath>
+    <xpath expr="//t[@t-set='display_taxes']" position="attributes"><attribute name="t-value">False</attribute></xpath>
+    <xpath expr="//th[@name='th_subtotal']" position="after"><th name="th_lot"><strong>Lots/Serial Num</strong></th></xpath>
+    <xpath expr="//td[@name='td_subtotal']" position="after"><td name="td_lot"><span t-field="line.jh_sale_lot_id"/></td></xpath>
+    <xpath expr="//td[@name='td_subtotal_grouped']" position="after"><td name="td_lot_grouped"/></xpath>
+    <xpath expr="//t[@t-set='line_colspan'][@t-value!='1']" position="attributes"><attribute name="t-value">3 + (1 if display_discount else 0)</attribute></xpath>
+    <xpath expr="//td[@name='line_name_td']/following-sibling::td[last()]" position="after"><td name="td_lot_section"/></xpath>
+    <xpath expr="//td[@name='line_name_td']/following-sibling::td[@colspan='2']" position="attributes"><attribute name="colspan">2</attribute></xpath>
+    <xpath expr="//td[@name='account_invoice_line_name_grouped']" position="attributes"><attribute name="t-att-colspan">2 if grouped_line['display_type'] != 'product' else 1</attribute></xpath>
+    <xpath expr="//span[@t-field='o.payment_reference']/../.." position="attributes"><attribute name="t-if">False</attribute></xpath>
+    <xpath expr="//p[@t-foreach='o.sudo().partner_banks_to_show()']/strong" position="before"><t t-set="bank_chars" t-value="max(0, min(o.payment_mode_id.show_bank_account_chars, len(partner_bank.acc_number)))"/></xpath>
+    <xpath expr="//t[@t-elif=&quot;o.payment_mode_id.show_bank_account == 'first'&quot;]/span" position="attributes"><attribute name="t-esc">partner_bank.acc_number[:bank_chars] + '*' * (len(partner_bank.acc_number) - bank_chars)</attribute></xpath>
+    <xpath expr="//t[@t-elif=&quot;o.payment_mode_id.show_bank_account == 'last'&quot;]/span" position="attributes"><attribute name="t-esc">'*' * (len(partner_bank.acc_number) - bank_chars) + (partner_bank.acc_number[-bank_chars:] if bank_chars else '')</attribute></xpath>
+    <xpath expr="//div[@name='reference']" position="after">
+      <div class="col" t-if="o.client_ref"><strong>Customer Order:</strong><div t-field="o.client_ref"/></div>
+      <div class="col" t-if="o.supplier_ref"><strong>Supplier Order:</strong><div t-field="o.supplier_ref"/></div>
+    </xpath>
+  </template>
+</odoo>

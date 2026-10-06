@@ -1,0 +1,239 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* miac_custom_reports
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0+e\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-01-09 16:09+0000\n"
+"PO-Revision-Date: 2025-01-09 16:09+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: \n"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid ""
+"<br/>\n"
+"                    Tlf:"
+msgstr ""
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_delivery_document_miac
+msgid "<span><strong>Delivery Address:</strong></span>"
+msgstr "<span><strong>DirecciÃ³n de Entrega:</strong></span>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "<strong>Bank Account:</strong>"
+msgstr "<strong>Cuenta Bancaria:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+msgid "<strong>Customer Order:</strong>"
+msgstr "<strong>Pedido Cliente:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_delivery_document_miac
+msgid "<strong>Customer Reference:</strong>"
+msgstr "<strong>Ref Cliente:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_purchaseorder_document_miac
+msgid "<strong>Discount</strong>"
+msgstr "<strong>Descuento</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+msgid "<strong>Fiscal Address:</strong><br/>"
+msgstr "<strong>DirecciÃ³n Fiscal:</strong><br/>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "<strong>Invoicing Address:</strong>"
+msgstr "<strong>DirecciÃ³n de FacturaciÃ³n:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+msgid "<strong>Lots/Serial Num</strong>"
+msgstr "<strong>Lots/Num Serie</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_purchaseorder_document_miac
+msgid "<strong>Ref</strong>"
+msgstr ""
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_purchaseorder_document_miac
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "<strong>Shipping Address:</strong>"
+msgstr "<strong>DirecciÃ³n de EnvÃ­o:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_purchaseorder_document_miac
+msgid "<strong>Shipping address:</strong>"
+msgstr "<strong>DirecciÃ³n de EnvÃ­o:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_purchaseorder_document_miac
+msgid "<strong>Supplier Address:</strong>"
+msgstr "<strong>DirecciÃ³n del Proveedor:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+msgid "<strong>Supplier Order:</strong>"
+msgstr "<strong>Pedido Proveedor:</strong>"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_delivery_document_miac
+msgid "<strong>Supplier Reference:</strong>"
+msgstr "<strong>Ref Proveedor:</strong>"
+
+#. module: miac_custom_reports
+#: model:ir.model.fields,help:miac_custom_reports.field_sale_order__partner_bank_id
+msgid ""
+"Bank Account Number to which the invoice will be paid. A Company bank "
+"account if this is a Customer Invoice or Vendor Credit Note, otherwise a "
+"Partner bank account number."
+msgstr ""
+"NÃºmero de cuenta bancaria a la que se pagarÃ¡ la factura. Una cuenta bancaria"
+" de la empresa si se trata de una factura de cliente o una nota de crÃ©dito "
+"de proveedor; de lo contrario, un nÃºmero de cuenta bancaria del socio."
+
+#. module: miac_custom_reports
+#: model:ir.model.fields,field_description:miac_custom_reports.field_sale_order__bank_partner_id
+msgid "Bank Partner"
+msgstr ""
+
+#. module: miac_custom_reports
+#: model:ir.model.fields,field_description:miac_custom_reports.field_account_bank_statement_line__client_ref
+#: model:ir.model.fields,field_description:miac_custom_reports.field_account_move__client_ref
+#: model:ir.model.fields,field_description:miac_custom_reports.field_account_payment__client_ref
+#: model:ir.model.fields,field_description:miac_custom_reports.field_stock_picking__client_ref
+msgid "Client Ref"
+msgstr "Ref CLiente"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+msgid "Customer Order"
+msgstr "Pedido Cliente"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_delivery_document_miac
+msgid "Customer reference"
+msgstr "Ref CLiente"
+
+#. module: miac_custom_reports
+#: model:ir.model,name:miac_custom_reports.model_account_move
+msgid "Journal Entry"
+msgstr "Asiento contable"
+
+#. module: miac_custom_reports
+#: model:ir.model,name:miac_custom_reports.model_account_move_line
+msgid "Journal Item"
+msgstr "Apunte contable"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "Lot/Num Serie"
+msgstr ""
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.stock_picking_view_form_inherit_notes_print
+msgid "Note"
+msgstr "Notas"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.stock_picking_view_form_inherit_notes_print
+msgid "Note to print"
+msgstr "Notas a imprimir"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "Offer #"
+msgstr "Oferta #"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "Order #"
+msgstr "Pedido #"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_delivery_document_miac
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_purchaseorder_document_miac
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "Phone"
+msgstr "TelÃ©fono"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "Pro-Forma Invoice #"
+msgstr "Factura Pro-Forma #"
+
+#. module: miac_custom_reports
+#: model:ir.model,name:miac_custom_reports.model_purchase_order
+msgid "Purchase Order"
+msgstr "Orden de compra"
+
+#. module: miac_custom_reports
+#: model:ir.model.fields,field_description:miac_custom_reports.field_sale_order__partner_bank_id
+msgid "Recipient Bank"
+msgstr "Banco destinatario"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_saleorder_document_miac
+msgid "SO0000"
+msgstr ""
+
+#. module: miac_custom_reports
+#: model:ir.model,name:miac_custom_reports.model_sale_order
+msgid "Sales Order"
+msgstr "Pedido"
+
+#. module: miac_custom_reports
+#: model:ir.model,name:miac_custom_reports.model_stock_move
+msgid "Stock Move"
+msgstr "Movimiento de stock"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+msgid "Supplier Order"
+msgstr "Pedido Proveedor"
+
+#. module: miac_custom_reports
+#: model:ir.model.fields,field_description:miac_custom_reports.field_account_bank_statement_line__supplier_ref
+#: model:ir.model.fields,field_description:miac_custom_reports.field_account_move__supplier_ref
+#: model:ir.model.fields,field_description:miac_custom_reports.field_account_payment__supplier_ref
+#: model:ir.model.fields,field_description:miac_custom_reports.field_stock_picking__supplier_ref
+msgid "Supplier Ref"
+msgstr "Ref Proveedor"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.report_invoice_document_miac
+msgid "Tax ID"
+msgstr "NIF"
+
+#. module: miac_custom_reports
+#: model:ir.model.fields,help:miac_custom_reports.field_sale_order__bank_partner_id
+msgid "Technical field to get the domain on the bank"
+msgstr "Campo tÃ©cnico para obtener el dominio en el banco"
+
+#. module: miac_custom_reports
+#: model:ir.model.fields,field_description:miac_custom_reports.field_stock_picking__notes_print
+msgid "Terms and Conditions"
+msgstr "Terminos y Condiciones"
+
+#. module: miac_custom_reports
+#: model_terms:ir.ui.view,arch_db:miac_custom_reports.stock_picking_view_form_inherit_notes_print
+msgid "Terms and condition"
+msgstr "Terminos y Condiciones"
+
+#. module: miac_custom_reports
+#: model:ir.model,name:miac_custom_reports.model_stock_picking
+msgid "Transfer"
+msgstr "Traslado"
