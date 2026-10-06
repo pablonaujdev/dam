@@ -9,13 +9,14 @@
         liquidaciones, visitas, adjuntos e históricos manuales.
         Facturación, consolidación y validaciones de renovación nativas de Odoo 19.
         Informes de facturas con costes por compañía, IVA y exportación XLSX/CSV.
+        El análisis conserva el detalle de líneas y los filtros Sin precio y Con precio.
         Histórico automático de consulta, sin regenerar datos al abrir contactos.
         Automatizaciones por lotes y avisos de vencimiento sin duplicados.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.0.1',
     'license': 'LGPL-3',
 
     # Módulos requeridos

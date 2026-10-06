@@ -1,4 +1,7 @@
+import ast
 from datetime import timedelta
+
+from lxml import etree
 
 from odoo import Command, fields
 from odoo.exceptions import UserError, ValidationError
@@ -146,3 +149,30 @@ class TestJhMigration19(TestSubscriptionCommon):
         self.partner.jh_client_sheet_ids.read(['jh_account_move', 'jh_quantity_sold'])
         self.assertTrue(manual.exists())
         self.assertEqual((attachment.res_model, attachment.res_id), (manual._name, manual.id))
+
+    def test_legacy_price_filters_use_native_invoice_analysis(self):
+        order = self._jh_order(recurring=False)
+        self.env['sale.order.line'].create({
+            'order_id': order.id, 'product_id': order.order_line.product_id.id,
+            'price_unit': 0, 'discount': 0, 'product_uom_qty': 1})
+        order.action_confirm()
+        invoice = order._create_invoices()
+        invoice.action_post()
+        report = self.env['account.invoice.report']
+        action = self.env.ref('account.action_account_invoice_report_all')
+        self.assertIn('list', action.view_mode.split(','))
+        view = report.get_view(
+            view_id=self.env.ref('account.view_account_invoice_report_search').id,
+            view_type='search')
+        arch = etree.fromstring(view['arch'].encode())
+        base_domain = [('move_id', '=', invoice.id)]
+        results = {}
+        for name in ('without_price', 'with_price'):
+            nodes = arch.xpath("//filter[@name='%s']" % name)
+            self.assertEqual(len(nodes), 1)
+            results[name] = report.search(base_domain + ast.literal_eval(nodes[0].get('domain')))
+            self.assertTrue(results[name])
+        self.assertFalse(results['without_price'] & results['with_price'])
+        self.assertEqual(set((results['without_price'] | results['with_price']).ids), set(report.search(base_domain).ids))
+        self.assertTrue(all(row.price_average == 0 for row in results['without_price']))
+        self.assertTrue(all(row.price_average != 0 for row in results['with_price']))

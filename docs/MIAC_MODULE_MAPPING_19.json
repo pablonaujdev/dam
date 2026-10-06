@@ -1,0 +1,16 @@
+{
+  "source_version": "17.0",
+  "target_version": "19.0",
+  "execution_policy": "review_only_no_database_conversion",
+  "module_changes": [
+    {"source": "commission", "target": "commission_oca", "kind": "rename", "preserve": ["module_id", "xmlids", "commission_models", "partner_agent_rel"]},
+    {"source": "account_commission", "target": "account_commission_oca", "kind": "rename", "preserve": ["module_id", "xmlids", "invoice_agent_lines", "settlements", "settlement_lines"]},
+    {"source": "sale_commission", "target": "sale_commission_oca", "kind": "rename", "preserve": ["module_id", "xmlids", "sale_agent_lines"], "warning": "El sale_commission nativo de Odoo 19 es diferente. Resolver el nombre OCA antes de cargar ese modulo nativo."},
+    {"source": "hr_commission", "target": "hr_commission_oca", "kind": "rename", "preserve": ["module_id", "xmlids", "employee_agents", "agent_type_salesman", "settlement_state"]},
+    {"source": "account_payment_partner", "target": "account_payment_mode", "kind": "merge", "preserve": ["existing_target_module_id", "source_xmlids", "payment_modes", "partner_payment_modes_by_company", "invoice_payment_modes", "refund_payment_modes"], "warning": "account_payment_mode ya existe en V17. No renombrar account_payment_partner encima del destino ni desinstalarlo."},
+    {"source": "account_invoice_line_report", "target": "account", "kind": "view_replacement", "preserve": ["account.invoice.report", "saved_filters", "custom_view_references"], "warning": "El addon V17 solo declara vistas, una accion y un menu del modelo nativo account.invoice.report. Revisar esos registros individualmente; no fusionar namespaces ni renombrar modelos."}
+  ],
+  "field_changes": [
+    {"model": "res.partner", "source": "agent_ids", "target": "commission_agent_ids", "relation_table": "partner_agent_rel", "relation_columns": ["partner_id", "agent_id"], "owner": "commission_oca", "migration": "commission_oca/migrations/19.0.2.0.0/pre-migrate.py", "required_library": "openupgradelib", "policy": "run_official_migration_once_after_review"}
+  ]
+}

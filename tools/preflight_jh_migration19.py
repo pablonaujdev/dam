@@ -7,6 +7,8 @@ import pathlib
 import psycopg2
 from psycopg2 import sql
 
+from preflight_module_mapping19 import PLAN, inspect_database
+
 TABLES = ('sale_order', 'sale_order_line', 'stock_lot', 'partner_agent_rel', 'commission',
           'commission_settlement', 'commission_settlement_line', 'sale_order_line_agent',
           'account_invoice_line_agent', 'product_category_agent_commission',
@@ -74,6 +76,7 @@ def inspect(connection):
             cursor.execute('SELECT partner_id, agent_id FROM partner_agent_rel ORDER BY partner_id, agent_id')
             result['partner_agent_pairs'] = cursor.fetchall()
 
+    result['module_mapping19'] = inspect_database(connection, json.loads(PLAN.read_text(encoding='utf-8')))
     return result
 
 

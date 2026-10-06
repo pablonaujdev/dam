@@ -108,6 +108,12 @@ liquidaciones y sus totales; verificar los archivos del filestore, no solo sus r
 | commission | commission_oca | ID de módulo, XML IDs, modelos y tablas de comisiones |
 | account_commission | account_commission_oca | Líneas de agente, liquidaciones e históricos |
 | sale_commission | sale_commission_oca | Comisiones de venta, agentes y referencias |
+| hr_commission | hr_commission_oca | Agentes empleados, liquidaciones y estados históricos |
+
+El mapa común también distingue la absorción `account_payment_partner` →
+`account_payment_mode` y la sustitución de interfaz de `account_invoice_line_report`.
+Revisión, controles y orden en [MIGRACION_CORRESPONDENCIAS_19.md](MIGRACION_CORRESPONDENCIAS_19.md).
+El preflight de JH incorpora el mapa central `MIAC_MODULE_MAPPING_19.json`.
 
 Efectuar la correspondencia de metadatos como parte del proceso de migración de la
 copia, antes de cargar los addons 19. **No desinstalar los módulos antiguos.**

@@ -1,0 +1,735 @@
+{
+  "generated_at_utc": "2026-10-06T20:58:16.538417+00:00",
+  "policy": "review_only_no_database_conversion",
+  "sources": {
+    "scope": "V19 addons present in repository; no claim about the full MIAC inventory",
+    "module_count": 29,
+    "dependency_closure_count": 82,
+    "modules": [
+      {
+        "module": "account_commission_oca",
+        "version": "19.0.1.0.1",
+        "source_module": "account_commission",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account",
+          "commission_oca"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "account_fiscal_position_partner_type",
+        "version": "19.0.1.0.0",
+        "source_module": "account_fiscal_position_partner_type",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "account_payment_mode",
+        "version": "19.0.1.1.0",
+        "source_module": "account_payment_mode",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.2"
+      },
+      {
+        "module": "account_payment_sale",
+        "version": "19.0.1.0.0",
+        "source_module": "account_payment_sale",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "sale",
+          "account_payment_mode"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.2"
+      },
+      {
+        "module": "account_payment_term_extension",
+        "version": "19.0.1.0.0",
+        "source_module": "account_payment_term_extension",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account",
+          "purchase"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.2"
+      },
+      {
+        "module": "account_tax_balance",
+        "version": "19.0.1.0.3",
+        "source_module": "account_tax_balance",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account",
+          "date_range"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "base_bank_from_iban",
+        "version": "19.0.1.0.1",
+        "source_module": "base_bank_from_iban",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "base_iban"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.1"
+      },
+      {
+        "module": "base_iso3166",
+        "version": "19.0.1.0.0",
+        "source_module": "base_iso3166",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "base"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.1"
+      },
+      {
+        "module": "commission_by_category",
+        "version": "19.0.1.0.0",
+        "source_module": "commission_by_category",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "commission_oca",
+          "sale_commission_oca"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0"
+      },
+      {
+        "module": "commission_oca",
+        "version": "19.0.2.0.0",
+        "source_module": "commission",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "base",
+          "product"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.1.0"
+      },
+      {
+        "module": "date_range",
+        "version": "19.0.1.0.0",
+        "source_module": "date_range",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "web"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.2.0"
+      },
+      {
+        "module": "hr_commission_oca",
+        "version": "19.0.1.0.0",
+        "source_module": "hr_commission",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account_commission_oca",
+          "hr"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "jh_sales_subscription",
+        "version": "19.0.1.0.1",
+        "source_module": "jh_sales_subscription",
+        "source_available_in_backup": false,
+        "dependencies": [
+          "base",
+          "sale",
+          "mail",
+          "sale_subscription",
+          "miac_line_subscription",
+          "commission_oca",
+          "sale_commission_oca",
+          "commission_by_category",
+          "account",
+          "product",
+          "base_automation",
+          "purchase",
+          "contacts",
+          "sale_stock",
+          "sale_purchase",
+          "purchase_stock",
+          "account_payment_mode",
+          "account_commission_oca",
+          "sale_purchase_lot"
+        ],
+        "legacy_references": []
+      },
+      {
+        "module": "l10n_es_aeat",
+        "version": "19.0.1.2.8",
+        "source_module": "l10n_es_aeat",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "l10n_es",
+          "account_tax_balance"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.2.0.2"
+      },
+      {
+        "module": "l10n_es_aeat_mod303",
+        "version": "19.0.1.0.2",
+        "source_module": "l10n_es_aeat_mod303",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "l10n_es",
+          "l10n_es_aeat"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.5.1"
+      },
+      {
+        "module": "l10n_es_aeat_mod390",
+        "version": "19.0.1.0.0",
+        "source_module": "l10n_es_aeat_mod390",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "l10n_es_aeat_mod303"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.2.0"
+      },
+      {
+        "module": "l10n_es_facturae",
+        "version": "19.0.1.0.0",
+        "source_module": "l10n_es_facturae",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account_payment_mode",
+          "l10n_es_partner",
+          "l10n_es",
+          "base_iso3166",
+          "base_vat",
+          "report_xml",
+          "report_qweb_parameter",
+          "l10n_es_aeat"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "l10n_es_mis_report",
+        "version": "19.0.1.1.0",
+        "source_module": "l10n_es_mis_report",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "l10n_es",
+          "mis_builder"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "l10n_es_partner",
+        "version": "19.0.1.0.3",
+        "source_module": "l10n_es_partner",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account",
+          "base_bank_from_iban",
+          "base_vat"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "miac_custom_reports",
+        "version": "19.0.1.0.0",
+        "source_module": "miac_custom_reports",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account",
+          "sale",
+          "purchase",
+          "stock",
+          "sale_stock",
+          "purchase_stock",
+          "account_payment_mode",
+          "account_payment_sale",
+          "sale_purchase_lot",
+          "jh_sales_subscription"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0"
+      },
+      {
+        "module": "miac_line_subscription",
+        "version": "19.0.1.0.0",
+        "source_module": "miac_line_subscription",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "miac_renovation_subscription"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0"
+      },
+      {
+        "module": "miac_renovation_subscription",
+        "version": "19.0.1.0.0",
+        "source_module": "miac_renovation_subscription",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "sale_subscription",
+          "sale_purchase_lot"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0"
+      },
+      {
+        "module": "mis_builder",
+        "version": "19.0.1.2.1",
+        "source_module": "mis_builder",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "account",
+          "board",
+          "report_xlsx",
+          "date_range"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.1"
+      },
+      {
+        "module": "report_qweb_parameter",
+        "version": "19.0.1.0.0",
+        "source_module": "report_qweb_parameter",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "web"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.1"
+      },
+      {
+        "module": "report_xlsx",
+        "version": "19.0.1.0.2",
+        "source_module": "report_xlsx",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "base",
+          "web"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.1"
+      },
+      {
+        "module": "report_xml",
+        "version": "19.0.1.0.1",
+        "source_module": "report_xml",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "web"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "sale_commission_oca",
+        "version": "19.0.1.0.1",
+        "source_module": "sale_commission",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "sale",
+          "account_commission_oca"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      },
+      {
+        "module": "sale_purchase_lot",
+        "version": "19.0.1.0.0",
+        "source_module": "sale_purchase_lot",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "sale",
+          "purchase",
+          "stock",
+          "sale_stock",
+          "sale_purchase",
+          "purchase_stock",
+          "sale_management"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0"
+      },
+      {
+        "module": "web_tree_many2one_clickable",
+        "version": "19.0.1.0.0",
+        "source_module": "web_tree_many2one_clickable",
+        "source_available_in_backup": true,
+        "dependencies": [
+          "web"
+        ],
+        "legacy_references": [],
+        "source_version": "17.0.1.0.0"
+      }
+    ],
+    "mapping_evidence": [
+      {
+        "source": "commission",
+        "target": "commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "commission_models",
+          "partner_agent_rel"
+        ],
+        "source_declared_ids": 43,
+        "shared_declared_ids": 43,
+        "source_ids_absent_in_target": []
+      },
+      {
+        "source": "account_commission",
+        "target": "account_commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "invoice_agent_lines",
+          "settlements",
+          "settlement_lines"
+        ],
+        "source_declared_ids": 30,
+        "shared_declared_ids": 30,
+        "source_ids_absent_in_target": []
+      },
+      {
+        "source": "sale_commission",
+        "target": "sale_commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "sale_agent_lines"
+        ],
+        "warning": "El sale_commission nativo de Odoo 19 es diferente. Resolver el nombre OCA antes de cargar ese modulo nativo.",
+        "source_declared_ids": 7,
+        "shared_declared_ids": 7,
+        "source_ids_absent_in_target": []
+      },
+      {
+        "source": "hr_commission",
+        "target": "hr_commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "employee_agents",
+          "agent_type_salesman",
+          "settlement_state"
+        ],
+        "source_declared_ids": 2,
+        "shared_declared_ids": 2,
+        "source_ids_absent_in_target": []
+      },
+      {
+        "source": "account_payment_partner",
+        "target": "account_payment_mode",
+        "kind": "merge",
+        "preserve": [
+          "existing_target_module_id",
+          "source_xmlids",
+          "payment_modes",
+          "partner_payment_modes_by_company",
+          "invoice_payment_modes",
+          "refund_payment_modes"
+        ],
+        "warning": "account_payment_mode ya existe en V17. No renombrar account_payment_partner encima del destino ni desinstalarlo.",
+        "source_declared_ids": 9,
+        "shared_declared_ids": 9,
+        "source_ids_absent_in_target": []
+      },
+      {
+        "source": "account_invoice_line_report",
+        "target": "account",
+        "kind": "view_replacement",
+        "preserve": [
+          "account.invoice.report",
+          "saved_filters",
+          "custom_view_references"
+        ],
+        "warning": "El addon V17 solo declara vistas, una accion y un menu del modelo nativo account.invoice.report. Revisar esos registros individualmente; no fusionar namespaces ni renombrar modelos.",
+        "source_declared_ids": 4,
+        "shared_declared_ids": 1,
+        "source_ids_absent_in_target": [
+          "action_account_invoice_line_report",
+          "menu_action_account_invoice_line_report",
+          "view_invoice_report_tree_info"
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "database": {
+    "database": "miac_v19",
+    "read_only": "on",
+    "mappings": [
+      {
+        "source": "commission",
+        "target": "commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "commission_models",
+          "partner_agent_rel"
+        ],
+        "source_module": null,
+        "target_module": {
+          "id": 137,
+          "name": "commission_oca",
+          "state": "installed",
+          "latest_version": "19.0.2.0.0"
+        },
+        "source_xmlid_count": 0,
+        "target_xmlid_count": 185,
+        "conflicting_xmlids": [],
+        "active_module_dependencies_on_source": [],
+        "legacy_view_keys": [],
+        "status": "target_installed_no_legacy_evidence_not_proof_of_data_migration"
+      },
+      {
+        "source": "account_commission",
+        "target": "account_commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "invoice_agent_lines",
+          "settlements",
+          "settlement_lines"
+        ],
+        "source_module": null,
+        "target_module": {
+          "id": 25,
+          "name": "account_commission_oca",
+          "state": "installed",
+          "latest_version": "19.0.1.0.1"
+        },
+        "source_xmlid_count": 0,
+        "target_xmlid_count": 130,
+        "conflicting_xmlids": [],
+        "active_module_dependencies_on_source": [],
+        "legacy_view_keys": [],
+        "status": "target_installed_no_legacy_evidence_not_proof_of_data_migration"
+      },
+      {
+        "source": "sale_commission",
+        "target": "sale_commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "sale_agent_lines"
+        ],
+        "warning": "El sale_commission nativo de Odoo 19 es diferente. Resolver el nombre OCA antes de cargar ese modulo nativo.",
+        "source_module": {
+          "id": 1099,
+          "name": "sale_commission",
+          "state": "uninstalled",
+          "latest_version": null
+        },
+        "target_module": {
+          "id": 1101,
+          "name": "sale_commission_oca",
+          "state": "installed",
+          "latest_version": "19.0.1.0.1"
+        },
+        "source_xmlid_count": 0,
+        "target_xmlid_count": 33,
+        "conflicting_xmlids": [],
+        "active_module_dependencies_on_source": [],
+        "legacy_view_keys": [],
+        "status": "target_installed_no_legacy_evidence_not_proof_of_data_migration"
+      },
+      {
+        "source": "hr_commission",
+        "target": "hr_commission_oca",
+        "kind": "rename",
+        "preserve": [
+          "module_id",
+          "xmlids",
+          "employee_agents",
+          "agent_type_salesman",
+          "settlement_state"
+        ],
+        "source_module": null,
+        "target_module": {
+          "id": 1453,
+          "name": "hr_commission_oca",
+          "state": "installed",
+          "latest_version": "19.0.1.0.0"
+        },
+        "source_xmlid_count": 0,
+        "target_xmlid_count": 14,
+        "conflicting_xmlids": [],
+        "active_module_dependencies_on_source": [],
+        "legacy_view_keys": [],
+        "status": "target_installed_no_legacy_evidence_not_proof_of_data_migration"
+      },
+      {
+        "source": "account_payment_partner",
+        "target": "account_payment_mode",
+        "kind": "merge",
+        "preserve": [
+          "existing_target_module_id",
+          "source_xmlids",
+          "payment_modes",
+          "partner_payment_modes_by_company",
+          "invoice_payment_modes",
+          "refund_payment_modes"
+        ],
+        "warning": "account_payment_mode ya existe en V17. No renombrar account_payment_partner encima del destino ni desinstalarlo.",
+        "source_module": null,
+        "target_module": {
+          "id": 46,
+          "name": "account_payment_mode",
+          "state": "installed",
+          "latest_version": "19.0.1.1.0"
+        },
+        "source_xmlid_count": 0,
+        "target_xmlid_count": 98,
+        "conflicting_xmlids": [],
+        "active_module_dependencies_on_source": [],
+        "legacy_view_keys": [],
+        "status": "target_installed_no_legacy_evidence_not_proof_of_data_migration"
+      },
+      {
+        "source": "account_invoice_line_report",
+        "target": "account",
+        "kind": "view_replacement",
+        "preserve": [
+          "account.invoice.report",
+          "saved_filters",
+          "custom_view_references"
+        ],
+        "warning": "El addon V17 solo declara vistas, una accion y un menu del modelo nativo account.invoice.report. Revisar esos registros individualmente; no fusionar namespaces ni renombrar modelos.",
+        "source_module": null,
+        "target_module": {
+          "id": 1,
+          "name": "account",
+          "state": "installed",
+          "latest_version": "19.0.1.4"
+        },
+        "source_xmlid_count": 0,
+        "target_xmlid_count": 2953,
+        "conflicting_xmlids": [],
+        "active_module_dependencies_on_source": [],
+        "legacy_view_keys": [],
+        "status": "target_installed_no_legacy_evidence_not_proof_of_data_migration"
+      }
+    ],
+    "field_metadata": [
+      [
+        "account.move",
+        "payment_mode_id",
+        "many2one",
+        "account.payment.mode",
+        [
+          "account_payment_mode"
+        ]
+      ],
+      [
+        "res.partner",
+        "agent_type",
+        "selection",
+        null,
+        [
+          "commission_oca",
+          "hr_commission_oca"
+        ]
+      ],
+      [
+        "res.partner",
+        "commission_agent_ids",
+        "many2many",
+        "res.partner",
+        [
+          "commission_oca"
+        ]
+      ],
+      [
+        "res.partner",
+        "customer_payment_mode_id",
+        "many2one",
+        "account.payment.mode",
+        [
+          "account_payment_mode"
+        ]
+      ],
+      [
+        "res.partner",
+        "employee",
+        "boolean",
+        null,
+        [
+          "base",
+          "hr"
+        ]
+      ],
+      [
+        "res.partner",
+        "supplier_payment_mode_id",
+        "many2one",
+        "account.payment.mode",
+        [
+          "account_payment_mode"
+        ]
+      ],
+      [
+        "sale.order",
+        "payment_mode_id",
+        "many2one",
+        "account.payment.mode",
+        [
+          "account_payment_sale"
+        ]
+      ]
+    ],
+    "company_payment_storage": [
+      [
+        "res_partner",
+        "customer_payment_mode_id",
+        "jsonb"
+      ],
+      [
+        "res_partner",
+        "supplier_payment_mode_id",
+        "jsonb"
+      ]
+    ],
+    "legacy_payment_properties_by_company": [],
+    "data_counts": {
+      "commission": 0,
+      "commission_section": 0,
+      "commission_settlement": 0,
+      "commission_settlement_line": 0,
+      "sale_order_line_agent": 0,
+      "account_invoice_line_agent": 0,
+      "partner_agent_rel": 0,
+      "account_payment_mode": 0
+    },
+    "partner_agent_pairs_md5": "d41d8cd98f00b204e9800998ecf8427e",
+    "acceptance": "Metadata audit only; no data migration or functional acceptance performed"
+  }
+}

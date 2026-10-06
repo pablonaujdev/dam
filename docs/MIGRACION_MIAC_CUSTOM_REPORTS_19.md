@@ -150,6 +150,8 @@ docker compose -f 'C:\Proyectos FL\DAM\miac_v19\compose.yaml' start web
 4. Revisar la correspondencia de módulos OCA antiguos con los nuevos sin
    desinstalaciones. Cualquier conversión de datos requiere revisión y
    autorización específica; esta entrega no ejecuta conversiones sobre MIAC.
+   La revisión preparada, incluida la absorción de `account_payment_partner`,
+   está en [MIGRACION_CORRESPONDENCIAS_19.md](MIGRACION_CORRESPONDENCIAS_19.md).
 5. Mantener correo y tareas automáticas desactivados hasta la aceptación
    funcional. El Excel de seguimiento se actualiza cuando se solicite.
 

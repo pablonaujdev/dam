@@ -38,6 +38,7 @@ def main():
             visit(dep)
         graph.append(module)
     visit(args.module)
+    checked_modules = set(CUSTOM) | {args.module}
     lock = json.loads((root / 'docs' / 'OCA_COMMISSION_19.lock.json').read_text(encoding='utf-8'))
     assert lock['commit'] == '74fcdc06111c6271faf12fb3c2e692da076271c2'
     for module, entry in lock['modules'].items():
@@ -53,8 +54,8 @@ def main():
     xmlids, references = set(), []
     for module in graph:
         path = paths[module]
-        if module in CUSTOM:
-            assert manifests[module]['version'] == '19.0.1.0.0'
+        if module in checked_modules:
+            assert re.fullmatch(r'19\.0\.\d+\.\d+\.\d+', manifests[module]['version']), module
             for filename in path.rglob('*.py'):
                 compile(filename.read_text(encoding='utf-8-sig'), str(filename), 'exec')
                 python_count += 1
@@ -106,14 +107,14 @@ def main():
             for element in tree.iter():
                 for attribute, value in list(element.attrib.items()):
                     element.set(attribute, re.sub(r'%\(([^)]+)\)d', lambda match: '%(' + (match[1] if '.' in match[1] else module + '.' + match[1]) + ')d', value))
-            if module in CUSTOM:
+            if module in checked_modules:
                 xml_count += 1
                 if not schema.validate(tree):
                     failures.append(f'XML schema: {file}: {schema.error_log.last_error}')
             for node in tree.xpath('//*[@id]'):
                 rid = node.get('id')
                 xmlids.add(rid if '.' in rid else module + '.' + rid)
-            if module in CUSTOM:
+            if module in checked_modules:
                 for node in tree.xpath('//*[@ref]'):
                     references.append((module, node.get('ref'), str(file)))
                 for node in tree.xpath('//*[@groups]'):
@@ -159,10 +160,10 @@ def main():
     for rid, (parent, _, priority, module, _, mode) in views.items():
         if parent and mode != 'primary':
             children.setdefault(parent, []).append(rid)
-        if module in CUSTOM and parent and parent not in views:
+        if module in checked_modules and parent and parent not in views:
             failures.append(f'Missing inherited view: {rid} -> {parent}')
     for module, rid, file in references:
-        if module not in CUSTOM:
+        if module not in checked_modules:
             continue
         full = rid if '.' in rid else module + '.' + rid
         if full not in xmlids:
@@ -172,7 +173,7 @@ def main():
         parent, specs, _, module, file, mode = views[rid]
         try:
             arch = apply_inheritance_specs(arch, copy.deepcopy(specs))
-            if module in CUSTOM:
+            if module in checked_modules:
                 checked.add(rid)
         except Exception as error:
             failures.append(f'Inheritance: {rid}: {error}')
@@ -190,7 +191,7 @@ def main():
         return copy.deepcopy(specs)
     roots = set()
     for rid, data in views.items():
-        if data[3] not in CUSTOM:
+        if data[3] not in checked_modules:
             continue
         node = rid
         while views.get(node, (None,))[0] in views and views[node][5] != 'primary':
@@ -201,7 +202,7 @@ def main():
             continue
         try:
             arch = base_arch(rid)
-            if views[rid][3] in CUSTOM:
+            if views[rid][3] in checked_modules:
                 checked.add(rid)
             descend(rid, arch)
         except Exception as error:
