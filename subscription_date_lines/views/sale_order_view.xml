@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_sale_order_date_subs_form_inherit" model="ir.ui.view">
+        <field name="name">view.sale.order.date_subs.form.inherit</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="before">
+                <field name="date_subs_start" optional="hide"/>
+                <field name="date_subs_end" optional="hide"/>
+            </xpath>
+            <xpath expr="//field[@name='order_line']" position="before">
+                <field name="date_subs_sync_start" invisible="1"/>
+                <field name="date_subs_sync_end" invisible="1"/>
+                <field name="date_subs_suggested_plan_id" invisible="1"/>
+            </xpath>
+        </field>
+    </record>
+
+
+</odoo>

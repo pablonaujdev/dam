@@ -10,7 +10,7 @@ import json
 import sys
 from lxml import etree
 
-CUSTOM = ('sale_purchase_lot', 'commission_by_category', 'miac_renovation_subscription', 'miac_line_subscription', 'jh_sales_subscription', 'account_payment_sale', 'miac_custom_reports')
+CUSTOM = ('sale_purchase_lot', 'commission_by_category', 'miac_renovation_subscription', 'miac_line_subscription', 'jh_sales_subscription', 'account_payment_sale', 'miac_custom_reports', 'subscription_date_lines')
 
 def main():
     parser = argparse.ArgumentParser()

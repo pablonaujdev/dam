@@ -21,8 +21,8 @@
                 <field name="order_partner_id"/>
                 <field name="order_id"/>
                 <field name="product_id"/>
-                <field name="start_date" optional="hide"/>
-                <field name="end_date"/>
+                <field name="date_subs_start" optional="hide"/>
+                <field name="date_subs_end"/>
                 <field name="subscription_state" optional="hide"/>
                 <field name="subscription_id" optional="show"/>
                 <field name="order_renove" optional="hide"/>
