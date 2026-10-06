@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_import_initial_account_move_wiz,import.initial.account.move.wiz,model_import_initial_account_move_wiz,account.group_account_user,1,1,1,1
+access_import_initial_account_move_wiz_manager,import.initial.account.move.wiz.manager,model_import_initial_account_move_wiz,account.group_account_manager,1,1,1,1

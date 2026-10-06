@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="import_initial_account_move_wiz_view_form" model="ir.ui.view">
+        <field name="name">import.initial.account.move.wiz.view.form</field>
+        <field name="model">import.initial.account.move.wiz</field>
+        <field name="arch" type="xml">
+            <form string="Account Move import">
+                <strong>File Example</strong>
+                <br/>
+                <a href="/import_initial_account_move/static/data/Import_Account_Move.xlsx">File_Example.xlsx</a>
+                <br/>
+                <group>
+                    <field name="date" required="1"/>
+                    <field name="journal_id" required="1" domain="[('active', '=', True)]"/>
+                    <field name="account_dif_id" invisible="1"/>
+                </group>
+                <group>
+                    <field name="file_name" invisible="0" readonly="1" nolabel="1"/>
+                    <field name="upload_file" filename="file_name" nolabel="1" required="1"/>
+                </group>
+                <footer>
+                    <button string="Import" name="import_xls_file" type="object"
+                        default_focus="1" class="btn-primary" />
+                    <button string="Cancel" class="btn-default" special="cancel" />
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_importar_account_move" model="ir.actions.act_window">
+        <field name="name">Import Account Move</field>
+        <field name="res_model">import.initial.account.move.wiz</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="import_initial_account_move_wiz_view_form" />
+        <field name="target">new</field>
+    </record>
+
+</odoo>

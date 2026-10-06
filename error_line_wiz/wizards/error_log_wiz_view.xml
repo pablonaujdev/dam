@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="error_log_wiz_view_form" model="ir.ui.view">
+        <field name="name">error.log.wiz.view.form</field>
+        <field name="model">error.log.wiz</field>
+        <field name="arch" type="xml">
+            <form string="Errors">
+                <span>
+                    <field name="message" readonly="1"/>
+                </span>
+                <field name="error_line_ids">
+                    <list create="0" delete="0" edit="0">
+                        <field name="error" readonly="1"/>
+                    </list>
+                </field>
+            <footer>
+                <button string="Close" special="cancel" class="btn btn-primary oe_inline"/>
+            </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <data>
+        <menuitem id="menu_importadores_initial" name="Importadores"
+                  parent="account.menu_finance_entries" sequence="20" groups="account.group_account_user,account.group_account_manager"/>
+
+
+        <menuitem id="menu_importador_account_move" name="Importar Asientos Apertura"
+            parent="import_initial_account_move.menu_importadores_initial" sequence="1"
+            action="import_initial_account_move.action_importar_account_move"/>
+
+    </data>
+</odoo>
