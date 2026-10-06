@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <record id="product_template_view_form_inherit_days_to_activate" model="ir.ui.view">
+        <field name="name">product.template.form.inherit.days.to.activate</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="subscription_date_lines.product_template_default_plan_view_form_inherit" />
+        <field name="priority">50</field>
+        <field name="arch" type="xml">
+            <field name="subscription_plan_default" position="after">
+                <field name="days_to_activate"/>
+            </field>
+        </field>
+    </record>
+
+</odoo>
