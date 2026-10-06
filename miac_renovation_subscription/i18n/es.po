@@ -1,0 +1,161 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* miac_renovation_subscription
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 17.0+e\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-11-04 16:27+0000\n"
+"PO-Revision-Date: 2024-11-04 16:27+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: \n"
+
+#. module: miac_renovation_subscription
+#: model_terms:ir.ui.view,arch_db:miac_renovation_subscription.sale_order_cancel_wiz_view_form
+msgid "Accept"
+msgstr "Aceptar"
+
+#. module: miac_renovation_subscription
+#: model_terms:ir.ui.view,arch_db:miac_renovation_subscription.sale_order_cancel_wiz_view_form
+msgid "Cancel"
+msgstr "Cancelar"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order__cancelation_reason
+#: model_terms:ir.ui.view,arch_db:miac_renovation_subscription.sale_order_view_form_inherit_cancel_reason
+msgid "Cancelation Reason"
+msgstr "Motivo de Cancelación"
+
+#. module: miac_renovation_subscription
+#: model:ir.model,name:miac_renovation_subscription.model_res_company
+msgid "Companies"
+msgstr "Compañías"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__create_uid
+msgid "Created by"
+msgstr ""
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__create_date
+msgid "Created on"
+msgstr ""
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__display_name
+msgid "Display Name"
+msgstr ""
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_line__end_date
+msgid "End Date"
+msgstr "Hasta"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__id
+msgid "ID"
+msgstr ""
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,help:miac_renovation_subscription.field_sale_order_line__end_date
+msgid ""
+"If set in advance, the subscription will be set to renew 1 month before the "
+"date and will be closed on the date set in this field."
+msgstr ""
+"Si se configura con antelación, la suscripción se renovará 1 mes antes de la "
+"fecha y se cerrará en la fecha establecida en este campo."
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__write_uid
+msgid "Last Updated by"
+msgstr ""
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__write_date
+msgid "Last Updated on"
+msgstr ""
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_res_company__months_renovation
+msgid "Months for renovation"
+msgstr "Meses para renovar"
+
+#. module: miac_renovation_subscription
+#. odoo-python
+#: code:addons/miac_renovation_subscription/models/sale_order.py:0
+#, python-format
+msgid "Order Cancelation"
+msgstr "Cancelación de Pedido"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order__order_renove
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_line__order_renove
+msgid "Order Renove"
+msgstr "Orden de Renovación"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__order_ids
+msgid "Orders"
+msgstr "Pedidos"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_cancel_wiz__reason
+msgid "Reason"
+msgstr "Motivo"
+
+#. module: miac_renovation_subscription
+#: model_terms:ir.ui.view,arch_db:miac_renovation_subscription.sale_order_cancel_wiz_view_form
+msgid "Reason Cancelation"
+msgstr "Motivo de Cancelación"
+
+#. module: miac_renovation_subscription
+#: model:ir.actions.server,name:miac_renovation_subscription.ir_cron_renovation_subscription_ir_actions_server
+msgid "Renovation Subscription"
+msgstr "Renovación de Suscripciones"
+
+#. module: miac_renovation_subscription
+#: model:ir.model,name:miac_renovation_subscription.model_sale_order_cancel_wiz
+msgid "Sale Order Cancel Wiz"
+msgstr ""
+
+#. module: miac_renovation_subscription
+#: model:ir.model,name:miac_renovation_subscription.model_sale_order
+msgid "Sales Order"
+msgstr "Orden de venta"
+
+#. module: miac_renovation_subscription
+#: model:ir.model,name:miac_renovation_subscription.model_sale_order_line
+msgid "Sales Order Line"
+msgstr "Línea de orden de venta"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_line__start_date
+msgid "Start Date"
+msgstr "Desde"
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,field_description:miac_renovation_subscription.field_sale_order_line__subscription_state
+msgid "Subscription Status"
+msgstr "Estado de la Suscripción"
+
+#. module: miac_renovation_subscription
+#: model_terms:ir.ui.view,arch_db:miac_renovation_subscription.res_company_view_form_inherit_renovation_months
+msgid "Subscriptions"
+msgstr "suscripciones"
+
+#. module: miac_renovation_subscription
+#. odoo-python
+#: code:addons/miac_renovation_subscription/wizards/sale_order_cancel_wiz.py:0
+#, python-format
+msgid "The reason is required."
+msgstr "El motivo es requerido."
+
+#. module: miac_renovation_subscription
+#: model:ir.model.fields,help:miac_renovation_subscription.field_sale_order_line__start_date
+msgid "The start date indicate when the subscription periods begin."
+msgstr "La fecha de inicio indica cuándo comienzan los períodos de suscripción."

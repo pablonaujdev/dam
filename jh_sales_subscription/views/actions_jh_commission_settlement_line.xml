@@ -4,7 +4,7 @@
         <record id="commission_view_settlement_form_inherit_jh_fields" model="ir.ui.view">
             <field name="name">commission.view.settlement.form.inherit.jh.fields</field>
             <field name="model">commission.settlement</field>
-            <field name="inherit_id" ref="commission.view_settlement_form"/>
+            <field name="inherit_id" ref="commission_oca.view_settlement_form"/>
             <field name="arch" type="xml">
 
                 <xpath expr="//field[@name='settled_amount']" position="before">
@@ -19,7 +19,7 @@
 
                 <xpath expr="//field[@name='invoice_line_id']" position="before">
                     <field name="jh_invoice_id" widget="many2one"/>
-                    <field name="jh_product_id" widget="many2one" 
+                    <field name="jh_product_id" widget="many2one"
                            context="{'commission_context': True}"
                            options="{'no_create': True, 'no_create_edit': True}"/>
                 </xpath>

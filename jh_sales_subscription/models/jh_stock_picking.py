@@ -11,9 +11,9 @@ class StockPicking(models.Model):
         readonly=True,
     )
 
-    @api.depends("move_ids_without_package.product_id")
+    @api.depends("move_ids.product_id")
     def _compute_jh_product_ids(self):
         for picking in self:
             picking.jh_product_ids = (
-                picking.move_ids_without_package.mapped("product_id")
+                picking.move_ids.mapped("product_id")
             )

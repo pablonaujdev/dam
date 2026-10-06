@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+sale_order_cancel_wiz_access,sale.order.cancel.wiz,miac_renovation_subscription.model_sale_order_cancel_wiz,base.group_user,1,1,1,1
+
+

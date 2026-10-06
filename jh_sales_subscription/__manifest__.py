@@ -3,42 +3,28 @@
     'name': "Personalizaciones MIAC - DAM",
     'summary': "Notificación de suscripciones próximas a vencer",
     'description': """
-        Gestiona personalizaciones comerciales y de suscripciones de MIAC.
-        Conserva las condiciones negociadas de precio y descuento en los pedidos.
-
-        Estructura técnica:
-        - models/jh_sale_order_line.py: sale.order y sale.order.line.
-        - write de sale.order.line protege precio y descuento manuales al cambiar la cantidad.
-        - models/jh_partner_subscription.py y vistas de contactos: suscripciones por dirección de entrega.
-        - views/jh_sale_subscription_views.xml: búsqueda de licencias por cliente donde está.
-        - models/jh_invoice_report_wizard.py: filtros del Excel por categoría y tipo de cliente.
-        - models/jh_sale_order_line.py: estado de facturación según líneas y facturas vinculadas.
-
-        Lógica funcional:
-        La tarifa recalcula los valores automáticos, mientras los valores negociados
-        permanecen en el pedido y se trasladan a la factura.
-        Las direcciones de entrega muestran sus suscripciones en curso en la ficha y el kanban.
-        La lista de licencias permite buscar por su dirección de entrega.
-        El Excel de facturas admite categorías de producto y facturas de clientes o proveedores.
-        El estado de facturación usa las líneas del pedido, también en renovaciones.
-        El recálculo actualiza primero el estado de las líneas, sin modificar cantidades
-        ni períodos, y respeta el cierre de las líneas recurrentes ya renovadas.
-        Corrige estados pendientes con cantidad cero únicamente cuando las facturas
-        contabilizadas cubren la cantidad neta y el período, descontando rectificativas.
-        Permite limitar el recálculo a los pedidos que actualmente están a facturar.
+        Personalizaciones MIAC compatibles con Odoo 19.
+        Conserva precios y descuentos negociados, condiciones de renovación,
+        lotes, contactos de entrega, comisiones OCA manuales y por categoría,
+        liquidaciones, visitas, adjuntos e históricos manuales.
+        Facturación, consolidación y validaciones de renovación nativas de Odoo 19.
+        Informes de facturas con costes por compañía, IVA y exportación XLSX/CSV.
+        Histórico automático de consulta, sin regenerar datos al abrir contactos.
+        Automatizaciones por lotes y avisos de vencimiento sin duplicados.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '17.0.0.7.3',
+    'version': '19.0.1.0.0',
     'license': 'LGPL-3',
 
     # Módulos requeridos
-    'depends': ['base', 'sale', 'mail', 'sale_subscription', 'miac_line_subscription', 'commission', 'sale_commission', 'commission_by_category', 'account', 'product', 'base_automation', 'purchase'],
+    'depends': ['base', 'sale', 'mail', 'sale_subscription', 'miac_line_subscription', 'commission_oca', 'sale_commission_oca', 'commission_by_category', 'account', 'product', 'base_automation', 'purchase', 'contacts', 'sale_stock', 'sale_purchase', 'purchase_stock', 'account_payment_mode', 'account_commission_oca', 'sale_purchase_lot'],
 
     # Archivos cargados siempre (orden: jh_client_sheet antes de actions_jh_visit)
     'data': [
         'security/ir.model.access.csv',
+        'security/jh_company_rules.xml',
         'data/cron_renovation_advice.xml',
         'data/cron_sale_order_invoice_status.xml',
         'data/cron_commission_liq_date.xml',

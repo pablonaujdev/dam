@@ -1,112 +1,14 @@
 from odoo import models, api, fields, _
 from odoo.exceptions import UserError
-from odoo.tools.float_utils import float_compare, float_is_zero
-from dateutil.relativedelta import relativedelta
-from odoo.tools.float_utils import float_compare, float_round
-from collections import defaultdict
-from contextlib import ExitStack
+from odoo.tools.float_utils import float_compare
 import logging
 
 _logger = logging.getLogger(__name__)
 
 
-class SaleAdvancePaymentInvInherit(models.TransientModel):
-    _inherit = 'sale.advance.payment.inv'
-
-    def allowManualRecurringPrebillFallback(self, sale_orders, error_message):
-        has_subscription = any(sale_orders.mapped('is_subscription'))
-        end_date_guard_message = (
-            'recurrentes cuya fecha de vencimiento ha pasado' in error_message
-            or 'past their end date' in error_message
-        )
-        return self.advance_payment_method == 'delivered' and has_subscription and end_date_guard_message
-
-    def _create_invoices(self, sale_orders):
-        # standard Odoo version "17"
-        try:
-            return super()._create_invoices(sale_orders)
-        except Exception as error:
-            error_message = str(error)
-            if not self.allowManualRecurringPrebillFallback(sale_orders, error_message):
-                raise
-
-            subscriptions = sale_orders.filtered(
-                lambda order: (
-                    order.is_subscription
-                    and order.state in ('sale', 'done')
-                    and order.subscription_state not in ('5_renewed', '6_churn')
-                )
-            )
-            recurring_lines = subscriptions.order_line.filtered(
-                lambda line: (
-                    not line.display_type
-                    and not line.is_downpayment
-                    and line.state == 'sale'
-                    and line.recurring_invoice
-                    and line.product_id
-                    and line.product_id.invoice_policy == 'order'
-                )
-            )
-            if not recurring_lines:
-                raise
-
-            recurring_lines._reset_subscription_qty_to_invoice()
-            invoices = sale_orders.with_context(
-                raise_if_nothing_to_invoice=False,
-                jh_allow_recurring_prepay=True,
-            )._create_invoices(
-                final=self.deduct_down_payments,
-                grouped=not self.consolidated_billing,
-            )
-            if not invoices:
-                raise
-
-            if subscriptions:
-                subscriptions._process_invoices_to_send(invoices)
-                subscriptions._update_next_invoice_date()
-            return invoices
-
-    def create_invoices(self):
-        # Consolidación activada: agrupar SOLO por (company, currency, partner_invoice)
-        if self.advance_payment_method == 'delivered' and getattr(self, 'consolidated_billing', False):
-            moves = self.env['account.move']
-            groups = defaultdict(lambda: self.env['sale.order'])
-
-            # Construimos los grupos explícitamente
-            for o in self.sale_order_ids:
-                partner_inv = o.partner_invoice_id or o.partner_id  # fallback seguro
-                key = (o.company_id.id, o.currency_id.id, partner_inv.id)
-                groups[key] |= o
-
-            # Por cada grupo, dejamos que Odoo consolide internamente esas SO
-            for so_group in groups.values():
-                # Usar contexto force_minimal_grouping para evitar errores de comparación
-                # cuando hay campos None (como subscription_id) en las claves de agrupación
-                moves |= self._create_invoices(
-                    so_group.with_context(force_minimal_grouping=True)
-                )
-
-            return self.sale_order_ids.action_view_invoice(moves)
-
-        # Flujo normal intacto
-        return super().create_invoices()
-
-
 class SaleOrderInherit(models.Model):
     _inherit = 'sale.order'
 
-    INVOICE_STATUS = [
-        ('upselling', 'Upselling Opportunity'),
-        ('invoiced', 'Fully Invoiced'),
-        ('to invoice', 'To Invoice'),
-        ('no', 'Nothing to Invoice')
-    ]
-
-    invoice_status = fields.Selection(
-        selection=INVOICE_STATUS,
-        string="Invoice Status",
-        compute='_compute_invoice_status',
-        store=True)
 
     jh_delivery_status = fields.Selection(
         selection=[
@@ -123,7 +25,8 @@ class SaleOrderInherit(models.Model):
         compute="_compute_jh_delivery_status",
         store=True,
         readonly=True,
-        index=True
+        index=True,
+        help='Resume la entrega de material con el estado nativo de inventario.\nDistingue ventas pendientes, entregas parciales y transferencias canceladas.'
     )
 
     @api.depends(
@@ -154,7 +57,7 @@ class SaleOrderInherit(models.Model):
                 lambda line:
                     not line.display_type
                     and line.product_id
-                    and line.product_id.type in ("product", "consu")
+                    and line.product_id.type == "consu"
                     and line.product_uom_qty > 0
             )
 
@@ -188,32 +91,6 @@ class SaleOrderInherit(models.Model):
                 "pending",
             )
 
-    def _get_invoice_grouping_keys(self):
-        if self.env.context.get('force_minimal_grouping'):
-            # SOLO estas llaves:
-            return ['company_id', 'currency_id', 'partner_invoice_id']
-        return super()._get_invoice_grouping_keys()
-
-    def _get_invoiceable_lines(self, final=False):
-        invoiceable_lines = super()._get_invoiceable_lines(final=final)
-        if not self.env.context.get('jh_allow_recurring_prepay'):
-            return invoiceable_lines
-
-        extra_lines = self.env['sale.order.line']
-        for order in self.filtered(lambda so: so.is_subscription and so.state in ('sale', 'done')):
-            if order.subscription_state in ('5_renewed', '6_churn'):
-                continue
-            extra_lines |= order.order_line.filtered(
-                lambda line: (
-                    not line.display_type
-                    and not line.is_downpayment
-                    and line.state == 'sale'
-                    and line.recurring_invoice
-                    and line.product_id
-                    and line.product_id.invoice_policy == 'order'
-                )
-            )
-        return invoiceable_lines | extra_lines
 
     def _jh_has_price_confirmation_gap(self):
         self.ensure_one()
@@ -305,274 +182,24 @@ class SaleOrderInherit(models.Model):
         return self._jh_prepare_subscription_order_with_mode('7_upsell')
 
     def _prepare_upsell_renew_order_values(self, subscription_state):
-        """
-        Sobrescribe el méodo para:
-        1. Actualizar el precio al precio actual del producto (usando la tarifa vigente)
-        2. Heredar el lote/número de serie de la suscripción original
-        """
         values = super()._prepare_upsell_renew_order_values(subscription_state)
-
-        for entry in values.get('order_line', []):
-            product_id = entry[2].get('product_id')
-            if not product_id:
+        originals = {line.id: line for line in self.order_line}
+        mode = self.env.context.get('renewal_pricing_mode', 'update_tariff')
+        for command in values.get('order_line', []):
+            if command[0] != 0:
                 continue
-            
-            # Buscar la línea original correspondiente
-            original_line = self.order_line.filtered(lambda l: l.product_id.id == product_id)
-            
-            if original_line:
-                original_line = original_line[0]  # Tomar la primera si hay varias
-                
-                # 1. Heredar el lot_id si existe en la línea original
-                if original_line.lot_id:
-                    entry[2]['lot_id'] = original_line.lot_id.id
-                    _logger.info(f"[RENOVACIÓN] Heredando lote {original_line.lot_id.name} para producto {product_id}")
-                
-                pricing_mode = self.env.context.get('renewal_pricing_mode', 'update_tariff')
-                if pricing_mode == 'keep_current':
-                    entry[2]['price_unit'] = original_line.price_unit
-                    entry[2]['discount'] = original_line.discount
-                    _logger.info(f"[RENOVACIÓN] Manteniendo precio y descuento actuales para producto {product_id}")
-                else:
-                    # 2. Forzar recálculo del precio eliminando price_unit y discount
-                    # Esto permite que el sistema aplique automáticamente la tarifa vigente
-                    # cuando se cree la nueva línea de orden
-                    if 'price_unit' in entry[2]:
-                        del entry[2]['price_unit']
-                        _logger.info(f"[RENOVACIÓN] Eliminando price_unit para recalcular precio actual del producto {product_id}")
-
-                    if 'discount' in entry[2]:
-                        del entry[2]['discount']
-                    _logger.info(f"[RENOVACIÓN] Eliminando discount para recalcular descuento según tarifa del producto {product_id}")
-
+            line_vals = command[2]
+            original = originals.get(line_vals.get('parent_line_id'))
+            if not original or original.display_type:
+                continue
+            line_vals['lot_id'] = original.lot_id.id
+            if mode == 'keep_current':
+                line_vals.update(price_unit=original.price_unit, discount=original.discount)
+            else:
+                line_vals.pop('price_unit', None)
+                line_vals.pop('discount', None)
         return values
 
-    def action_confirm(self):
-        """
-        Sobrescribe action_confirm para manejar el caso de renovaciones de suscripciones
-        que tienen referencias incorrectas que impiden la confirmación.
-        
-        El error "No puede renovar una suscripción que ya se renovó" ocurre cuando
-        la suscripción tiene una referencia a otra orden de renovación que bloquea
-        la confirmación de la orden actual.
-        """
-        # Limpiar referencias problemáticas ANTES de intentar confirmar
-        for order in self:
-            # Si es una orden de renovación de suscripción
-            if order.is_subscription and order.subscription_id:
-                subscription = order.subscription_id
-                _logger.info(f"[RENOVACIÓN] Intentando confirmar orden {order.name}, suscripción: {subscription.id}")
-                _logger.info(f"[RENOVACIÓN] Estado de la orden: {order.state}, subscription_state: {getattr(order, 'subscription_state', 'N/A')}")
-                
-                # IMPORTANTE: Limpiar renewal_order_id SIEMPRE si es diferente a la orden actual
-                # Esto es necesario porque Odoo valida que una suscripción solo pueda tener una renovación
-                if hasattr(subscription, 'renewal_order_id') and subscription.renewal_order_id:
-                    renewal_order = subscription.renewal_order_id
-                    _logger.info(f"[RENOVACIÓN] Suscripción tiene renewal_order_id: {renewal_order.name} (estado: {renewal_order.state}, id: {renewal_order.id})")
-                    _logger.info(f"[RENOVACIÓN] Orden actual: {order.name} (id: {order.id})")
-                    
-                    # Si la orden de renovación referenciada es diferente a la actual, limpiarla SIEMPRE
-                    if renewal_order.id != order.id:
-                        _logger.warning(f"[RENOVACIÓN] La suscripción referencia a otra orden ({renewal_order.name}). Limpiando referencia...")
-                        # Obtener el nombre correcto de la tabla
-                        subscription_table = subscription._table if hasattr(subscription, '_table') else 'sale_order'
-                        _logger.info(f"[RENOVACIÓN] Usando tabla: {subscription_table}")
-                        
-                        # Verificar si la columna existe en la tabla antes de actualizar
-                        self.env.cr.execute("""
-                            SELECT column_name 
-                            FROM information_schema.columns 
-                            WHERE table_name = %s AND column_name = 'renewal_order_id'
-                        """, (subscription_table,))
-                        column_exists = self.env.cr.fetchone() is not None
-                        
-                        if column_exists:
-                            # Usar SQL directo inmediatamente para evitar cualquier validación
-                            self.env.cr.execute(
-                                f"UPDATE {subscription_table} SET renewal_order_id = NULL WHERE id = %s",
-                                (subscription.id,)
-                            )
-                            _logger.info(f"[RENOVACIÓN] Columna renewal_order_id actualizada en BD")
-                        else:
-                            _logger.warning(f"[RENOVACIÓN] La columna renewal_order_id no existe en la tabla {subscription_table}")
-                        
-                        # Invalidar y refrescar el cache completo
-                        self.env.registry.clear_cache()
-                        # Solo invalidar si el campo existe en el modelo
-                        if 'renewal_order_id' in subscription._fields:
-                            subscription.invalidate_recordset(['renewal_order_id'])
-                        # Volver a leer la suscripción para obtener el valor actualizado
-                        subscription = self.env['sale.order'].browse(subscription.id)
-                        
-                        # Verificar que se limpió correctamente (solo si la columna existe)
-                        if column_exists:
-                            self.env.cr.execute(
-                                f"SELECT renewal_order_id FROM {subscription_table} WHERE id = %s",
-                                (subscription.id,)
-                            )
-                            result = self.env.cr.fetchone()
-                            renewal_id_db = result[0] if result else None
-                            _logger.info(f"[RENOVACIÓN] Referencia limpiada. Verificación en BD: renewal_order_id = {renewal_id_db}")
-                        else:
-                            # Si no existe la columna, intentar limpiar usando el méodo write si el campo existe como atributo
-                            try:
-                                subscription.write({'renewal_order_id': False})
-                                _logger.info(f"[RENOVACIÓN] Referencia limpiada usando write()")
-                            except Exception as e:
-                                _logger.warning(f"[RENOVACIÓN] No se pudo limpiar renewal_order_id: {e}")
-                    else:
-                        _logger.info(f"[RENOVACIÓN] La suscripción ya referencia a esta orden, está correcto")
-                
-                # También verificar si hay otras órdenes de renovación relacionadas
-                # que puedan estar causando conflictos (verificar en order_ids si existe)
-                if hasattr(subscription, 'order_ids'):
-                    related_orders = subscription.order_ids.filtered(
-                        lambda o: o.is_subscription and o.id != order.id
-                    )
-                    
-                    # Buscar órdenes de renovación pendientes que puedan causar conflicto
-                    related_renewal_orders = related_orders.filtered(
-                        lambda o: o.state in ('draft', 'cancel') 
-                        and hasattr(o, 'subscription_state') 
-                        and o.subscription_state in ('3_renewal', '4_renewed', '5_renewed')
-                    )
-                    
-                    if related_renewal_orders:
-                        _logger.info(f"[RENOVACIÓN] Encontradas {len(related_renewal_orders)} órdenes de renovación relacionadas en estado draft/cancel")
-                    
-                    # Si hay órdenes de renovación canceladas, limpiar sus estados
-                    for old_renewal in related_renewal_orders:
-                        if old_renewal.state == 'cancel' and hasattr(old_renewal, 'subscription_state'):
-                            _logger.info(f"[RENOVACIÓN] Limpiando subscription_state de orden cancelada: {old_renewal.name}")
-                            old_renewal.write({'subscription_state': False})
-        
-        # Forzar guardado de todos los cambios antes de confirmar
-        self.env.flush_all()
-        
-        # Invalidar caché de suscripciones después de la limpieza
-        # Solo si el campo existe en el modelo
-        for order in self:
-            if order.is_subscription and order.subscription_id:
-                subscription = order.subscription_id
-                if 'renewal_order_id' in subscription._fields:
-                    subscription.invalidate_recordset(['renewal_order_id'])
-                else:
-                    # Si el campo no existe, solo limpiar el caché general
-                    self.env.registry.clear_cache()
-        
-        # Intentar confirmar con contexto que puede ayudar a evitar validaciones
-        try:
-            return super(SaleOrderInherit, self.with_context(skip_renewal_check=True)).action_confirm()
-        except Exception as e:
-            error_msg = str(e)
-            # Si el error es el de renovación ya realizada, intentar una última vez
-            # limpiando todas las referencias de forma más agresiva
-            if "renovó" in error_msg or "renewed" in error_msg.lower() or "already renewed" in error_msg.lower():
-                _logger.error(f"[RENOVACIÓN] Error persistente al confirmar: {error_msg}. Limpieza final agresiva...")
-                
-                # Limpieza final más agresiva usando SQL directo
-                orders_to_retry = self.browse([])
-                for order in self:
-                    # Verificar si la orden todavía necesita confirmación
-                    order.invalidate_recordset(['state'])
-                    order_state = order.state
-                    if order_state != 'draft':
-                        _logger.info(f"[RENOVACIÓN] Orden {order.name} ya está en estado '{order_state}', no necesita confirmación")
-                        continue
-                    
-                    if order.is_subscription and order.subscription_id:
-                        subscription = order.subscription_id
-                        # Buscar el nombre de la tabla de suscripciones
-                        subscription_table = subscription._table if hasattr(subscription, '_table') else 'sale_order'
-                        
-                        if hasattr(subscription, 'renewal_order_id') and subscription.renewal_order_id:
-                            if subscription.renewal_order_id.id != order.id:
-                                _logger.warning(f"[RENOVACIÓN] Limpieza final SQL: eliminando referencia renewal_order_id de suscripción {subscription.id}")
-                                
-                                # Verificar si la columna existe en la tabla
-                                self.env.cr.execute("""
-                                    SELECT column_name 
-                                    FROM information_schema.columns 
-                                    WHERE table_name = %s AND column_name = 'renewal_order_id'
-                                """, (subscription_table,))
-                                column_exists = self.env.cr.fetchone() is not None
-                                
-                                if column_exists:
-                                    # Usar SQL directo para evitar validaciones de Odoo
-                                    self.env.cr.execute(
-                                        f"UPDATE {subscription_table} SET renewal_order_id = NULL WHERE id = %s",
-                                        (subscription.id,)
-                                    )
-                                    _logger.info(f"[RENOVACIÓN] Columna renewal_order_id actualizada en BD")
-                                else:
-                                    _logger.warning(f"[RENOVACIÓN] La columna renewal_order_id no existe en la tabla {subscription_table}")
-                                
-                                # Invalidar el cache solo si el campo existe
-                                if 'renewal_order_id' in subscription._fields:
-                                    subscription.invalidate_recordset(['renewal_order_id'])
-                                else:
-                                    self.env.registry.clear_cache()
-                                
-                                # Volver a leer la suscripción
-                                subscription = self.env['sale.order'].browse(subscription.id)
-                                
-                                # Verificar resultado
-                                if hasattr(subscription, 'renewal_order_id'):
-                                    _logger.info(f"[RENOVACIÓN] Referencia limpiada. renewal_order_id ahora es: {subscription.renewal_order_id}")
-                                else:
-                                    _logger.info(f"[RENOVACIÓN] Referencia limpiada (campo no existe en modelo)")
-                        
-                        # También buscar si hay otras órdenes relacionadas que puedan estar bloqueando
-                        # Buscar todas las órdenes de renovación de esta suscripción
-                        related_renewal_orders = self.env['sale.order'].search([
-                            ('subscription_id', '=', subscription.id),
-                            ('is_subscription', '=', True),
-                            ('id', '!=', order.id),
-                            ('state', 'in', ('draft', 'sent')),
-                            ('subscription_state', 'in', ('3_renewal', '4_renewed', '5_renewed'))
-                        ])
-                        
-                        if related_renewal_orders:
-                            _logger.warning(f"[RENOVACIÓN] Encontradas {len(related_renewal_orders)} órdenes de renovación relacionadas: {related_renewal_orders.mapped('name')}")
-                            # Limpiar el subscription_state de órdenes en borrador que puedan causar conflicto
-                            for rel_order in related_renewal_orders:
-                                if rel_order.state == 'draft':
-                                    _logger.info(f"[RENOVACIÓN] Limpiando subscription_state de orden relacionada: {rel_order.name}")
-                                    rel_order.write({'subscription_state': False})
-                    
-                    orders_to_retry |= order
-                
-                # Si hay órdenes para reintentar, hacerlo
-                if orders_to_retry:
-                    _logger.info(f"[RENOVACIÓN] Reintentando confirmar órdenes: {orders_to_retry.mapped('name')}")
-                    # Forzar flush e invalidar antes de reintentar
-                    self.env.flush_all()
-                    for order in orders_to_retry:
-                        order.invalidate_recordset(['state', 'subscription_state'])
-                        if order.subscription_id:
-                            subscription = order.subscription_id
-                            if 'renewal_order_id' in subscription._fields:
-                                subscription.invalidate_recordset(['renewal_order_id'])
-                            else:
-                                self.env.registry.clear_cache()
-                    
-                    try:
-                        return super(SaleOrderInherit, orders_to_retry).action_confirm()
-                    except Exception as retry_error:
-                        error_msg2 = str(retry_error)
-                        # Si el error es que ya no necesita confirmación, considerarlo éxito
-                        if "no se encuentran en un estado que necesite confirmación" in error_msg2 or "not in a state requiring confirmation" in error_msg2.lower():
-                            _logger.info(f"[RENOVACIÓN] Las órdenes ya están confirmadas: {error_msg2}")
-                            # Verificar el estado y devolver las órdenes confirmadas
-                            return orders_to_retry
-                        # Si es otro error, propagarlo
-                        raise
-                else:
-                    # No hay órdenes para reintentar (todas ya están confirmadas)
-                    _logger.info(f"[RENOVACIÓN] No hay órdenes pendientes de confirmación")
-                    return self
-            # Si es otro error, propagarlo
-            raise
 
     @api.onchange('validity_date')
     def _onchange_due_date(self):
@@ -584,223 +211,75 @@ class SaleOrderInherit(models.Model):
                 }
             }
 
-    def create_invoices(self):
-        moves = self.env['account.move']
-        precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
-
-        if self.advance_payment_method == 'delivered':
-            for order in self.sale_order_ids:
-                order._compute_invoice_status()
-
-                # IMPORTANTE: Forzar que qty_to_invoice siempre use cantidades entregadas
-                # independientemente de la política de facturación del producto
-                for line in order.order_line.filtered(lambda l: not l.display_type and l.product_id):
-                    # Calcular cantidad a facturar basándose SIEMPRE en cantidades entregadas
-                    qty_delivered = line.qty_delivered or 0.0
-                    qty_invoiced = line.qty_invoiced or 0.0
-                    qty_to_invoice_delivered = qty_delivered - qty_invoiced
-                    
-                    # Actualizar qty_to_invoice solo si hay cantidad pendiente de facturar
-                    if float_compare(qty_to_invoice_delivered, 0.0, precision_digits=precision) > 0:
-                        line.qty_to_invoice = qty_to_invoice_delivered
-                        _logger.info(f"[FACTURACIÓN] Línea {line.id} - Producto: {line.product_id.name} - "
-                                   f"Entregado: {qty_delivered}, Facturado: {qty_invoiced}, "
-                                   f"A facturar: {qty_to_invoice_delivered}")
-                    else:
-                        line.qty_to_invoice = 0.0
-
-                # Verificar si es recurrente y tiene fecha válida
-                if order.is_subscription and order.next_invoice_date:
-                    invoice_lines = order.order_line.filtered(
-                        lambda l: not l.display_type and float_compare(l.qty_to_invoice, 0.0, precision_digits=precision) > 0
-                    )
-                    if invoice_lines:
-                        moves |= order._create_invoices(final=True, date=order.next_invoice_date)
-                        continue
-
-                # Facturación normal si no es recurrente
-                invoice_lines = order.order_line.filtered(
-                    lambda l: not l.display_type and float_compare(l.qty_to_invoice, 0.0, precision_digits=precision) > 0
-                )
-                if invoice_lines:
-                    moves |= order._create_invoices(final=True)
-
-            return self.sale_order_ids.action_view_invoice(moves)
-
-        return super().create_invoices()
-
-
-    @api.depends(
-        'state', 'subscription_state', 'order_line.invoice_status',
-        'order_line.invoice_lines.move_id.state', 'order_line.qty_invoiced',
-        'order_line.product_uom_qty', 'order_line.product_id',
-        'order_line.display_type', 'order_line.is_downpayment',
-        'order_line.recurring_invoice', 'order_line.qty_to_invoice',
-        'order_line.invoice_lines.quantity', 'order_line.invoice_lines.product_uom_id',
-        'order_line.invoice_lines.move_id.move_type',
-        'order_line.invoice_lines.deferred_start_date',
-        'order_line.invoice_lines.deferred_end_date', 'order_line.product_uom',
-        'next_invoice_date', 'plan_id.billing_period_value', 'plan_id.billing_period_unit',
-    )
-    def _compute_invoice_status(self):
-        super()._compute_invoice_status()
-        precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
-        for order in self:
-            if order.subscription_state == '6_churn':
-                order.invoice_status = 'no'
-                continue
-            if order.subscription_state == '5_renewed' and order.invoice_status == 'to invoice':
-                pending_lines = order.order_line.filtered(
-                    lambda line: not line.display_type and not line.is_downpayment
-                    and line.invoice_status == 'to invoice'
-                )
-                # La renovación cierra la recurrencia del contrato anterior.
-                # Las líneas no recurrentes conservan su facturación normal.
-                if pending_lines and all(line.recurring_invoice for line in pending_lines):
-                    order.invoice_status = 'no'
-                continue
-            if order.state != 'sale' or order.invoice_status not in ('no', 'to invoice'):
-                continue
-            lines = order.order_line.filtered(
-                lambda line: line.product_id and not line.display_type and not line.is_downpayment
-            )
-            if not lines or not lines.invoice_lines.move_id.filtered(lambda invoice: invoice.state == 'posted'):
-                continue
-            fully_invoiced = all(
-                float_compare(line.qty_invoiced, line.product_uom_qty, precision_digits=precision) >= 0
-                for line in lines
-            )
-            if order.invoice_status == 'to invoice':
-                fully_invoiced = fully_invoiced and all(
-                    float_is_zero(line.qty_to_invoice, precision_digits=precision)
-                    and (
-                        float_is_zero(line.product_uom_qty, precision_digits=precision)
-                        or line._jh_has_posted_invoice_coverage(precision)
-                    )
-                    for line in lines
-                )
-            if fully_invoiced:
-                order.invoice_status = 'invoiced'
 
     @api.model
     def _cron_recalcular_invoice_status(self, only_pending=False):
-        """Actualizar primero las líneas, sin alterar cantidades ni períodos."""
+        """Recompute native values in batches; never alter invoice quantities or periods."""
         domain = [('invoice_status', '=', 'to invoice')] if only_pending else []
-        order_ids = self.search(domain, order='id').ids
-        changed_orders = 0
-        changed_lines = 0
-        for start in range(0, len(order_ids), 200):
-            orders = self.browse(order_ids[start:start + 200])
+        scheduled = bool(self.env.context.get('cron_id'))
+        parameters = self.env['ir.config_parameter'].sudo()
+        key = 'jh_sales_subscription.invoice_status_cursor.%s' % (self.env.context.get('cron_id') or 'manual')
+        last_id = int(parameters.get_param(key, '0')) if scheduled else 0
+        result = {'orders_checked': 0, 'orders_changed': 0, 'lines_changed': 0}
+        if scheduled:
+            self.env['ir.cron']._commit_progress(remaining=self.search_count(domain + [('id', '>', last_id)]))
+        while orders := self.search(domain + [('id', '>', last_id)], order='id', limit=200):
             lines = orders.order_line
-            previous_orders = {order.id: order.invoice_status for order in orders}
-            previous_lines = {line.id: line.invoice_status for line in lines}
-
+            old_orders = {order.id: order.invoice_status for order in orders}
+            old_lines = {line.id: line.invoice_status for line in lines}
             self.env.add_to_compute(lines._fields['invoice_status'], lines)
             lines._recompute_recordset(['invoice_status'])
             self.env.add_to_compute(self._fields['invoice_status'], orders)
             orders._recompute_recordset(['invoice_status'])
-
-            changed_lines += sum(
-                previous_lines[line.id] != line.invoice_status for line in lines
-            )
-            for order in orders:
-                previous_status = previous_orders[order.id]
-                if previous_status != order.invoice_status:
-                    changed_orders += 1
-                    _logger.info(
-                        'Estado de facturación corregido %s: %s -> %s',
-                        order.name, previous_status, order.invoice_status,
-                    )
-        result = {
-            'orders_checked': len(order_ids),
-            'orders_changed': changed_orders,
-            'lines_changed': changed_lines,
-        }
-        _logger.info('Recálculo de estados de facturación: %s', result)
+            result['orders_checked'] += len(orders)
+            result['orders_changed'] += sum(old_orders[order.id] != order.invoice_status for order in orders)
+            result['lines_changed'] += sum(old_lines[line.id] != line.invoice_status for line in lines)
+            last_id = orders[-1].id
+            if scheduled:
+                parameters.set_param(key, last_id)
+                if not self.env['ir.cron']._commit_progress(len(orders)):
+                    return result
+        if scheduled:
+            parameters.set_param(key, 0)
+            self.env['ir.cron']._commit_progress(remaining=0)
         return result
 
-
-    def _was_product_already_invoiced(self):
-        self.ensure_one()
-        producto_ids = self.order_line.filtered(
-            lambda l: not l.display_type and not l.is_downpayment
-        ).mapped('product_id')
-
-        if not producto_ids:
-            return False
-        fecha_inicio = self.date_order.date()
-        fecha_limite = fecha_inicio + relativedelta(years=1)
-
-        facturas_cliente = self.env['account.move'].search([
-            ('partner_id', '=', self.partner_id.id),
-            ('state', '=', 'posted'),
-            ('move_type', '=', 'out_invoice'),
-            ('invoice_date', '>=', fecha_inicio),
-            ('invoice_date', '<=', fecha_limite)])
-
-        for factura in facturas_cliente:
-            for linea in factura.invoice_line_ids:
-                if linea.product_id in producto_ids and float_compare(linea.quantity, 1.0, precision_digits=2) >= 0:
-                    if float_compare(linea.price_unit, linea.product_id.lst_price, precision_digits=2) >= 0:
-                        return True
-        return False
 
 class SaleOrderLineInherit(models.Model):
     _inherit = 'sale.order.line'
 
-    def _jh_has_posted_invoice_coverage(self, precision):
-        """Comprobar la cantidad neta contabilizada para el período de la línea."""
-        self.ensure_one()
-        if (
-            not float_is_zero(self.qty_to_invoice, precision_digits=precision)
-            or float_compare(self.qty_invoiced, self.product_uom_qty, precision_digits=precision) < 0
-        ):
-            return False
-        invoice_lines = self.invoice_lines.filtered(
-            lambda line: line.move_id.state == 'posted'
-            and line.move_id.move_type in ('out_invoice', 'out_refund')
-        )
-        if self.recurring_invoice:
-            order = self.order_id
-            if not order.next_invoice_date or not order.plan_id:
-                return False
-            period_start = order.next_invoice_date - order.plan_id.billing_period
-            period_end = order.next_invoice_date - relativedelta(days=1)
-            # Mismo período que sale_subscription, usando solo documentos contabilizados.
-            invoice_lines = invoice_lines.filtered(
-                lambda line: line.deferred_start_date and line.deferred_end_date
-                and period_start <= line.deferred_start_date <= period_end
-                and line.deferred_end_date == period_end
-            )
-        if not invoice_lines.filtered(lambda line: line.move_id.move_type == 'out_invoice'):
-            return False
-        quantity = sum(
-            (1 if line.move_id.move_type == 'out_invoice' else -1)
-            * line.product_uom_id._compute_quantity(line.quantity, self.product_uom)
-            for line in invoice_lines
-        )
-        return float_compare(quantity, self.product_uom_qty, precision_digits=precision) >= 0
 
-    @api.depends(
-        'qty_to_invoice', 'qty_invoiced', 'product_uom_qty', 'product_uom',
-        'recurring_invoice', 'invoice_lines.move_id.state', 'invoice_lines.move_id.move_type',
-        'invoice_lines.quantity', 'invoice_lines.product_uom_id',
-        'invoice_lines.deferred_start_date', 'invoice_lines.deferred_end_date',
-        'order_id.next_invoice_date', 'order_id.plan_id.billing_period_value',
-        'order_id.plan_id.billing_period_unit',
-    )
-    def _compute_invoice_status(self):
-        super()._compute_invoice_status()
-        if self.env.context.get('skip_line_status_compute'):
-            return
-        precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
+    jh_discount_manual = fields.Boolean(
+        string='Descuento negociado', copy=True,
+        help='Conserva un descuento introducido expresamente en la linea.\nEvita que los cambios de cantidad o unidad sustituyan las condiciones negociadas.')
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        values = [dict(vals) for vals in vals_list]
+        for vals in values:
+            if 'discount' in vals:
+                vals.setdefault('jh_discount_manual', True)
+        lines = super().create(values)
+        for line, vals in zip(lines, values):
+            if 'price_unit' in vals and 'technical_price_unit' not in vals:
+                expected = line._get_pricelist_reprice_vals()
+                if expected:
+                    line.with_context(sale_write_from_compute=True).technical_price_unit = expected['price_unit']
+        return lines
+
+    @api.depends('product_id', 'product_uom_id', 'product_uom_qty', 'jh_discount_manual')
+    def _compute_discount(self):
+        automatic = self.filtered(lambda line: not line.jh_discount_manual)
+        super(SaleOrderLineInherit, automatic)._compute_discount()
+        for line in self - automatic:
+            line.discount = line.discount
+
+    @api.onchange('discount')
+    def _onchange_jh_discount_manual(self):
         for line in self:
-            if (
-                line.state == 'sale' and line.invoice_status == 'to invoice'
-                and not line.display_type and not line.is_downpayment
-                and line._jh_has_posted_invoice_coverage(precision)
-            ):
-                line.invoice_status = 'invoiced'
+            expected = line._get_pricelist_reprice_vals().get('discount', 0.0)
+            if float_compare(line.discount, expected, precision_digits=2):
+                line.jh_discount_manual = True
 
     def _prepare_invoice_line(self, **optional_values):
         """
@@ -808,11 +287,11 @@ class SaleOrderLineInherit(models.Model):
         como jh_sale_lot_id para que pueda ser utilizado en reportes y comisiones
         """
         res = super()._prepare_invoice_line(**optional_values)
-        
+
         # Si esta línea tiene un lot_id, agregarlo a los valores de la línea de factura
         if self.lot_id:
             res['jh_sale_lot_id'] = self.lot_id.id
-        
+
         return res
 
     @api.depends("order_id.partner_id")
@@ -829,6 +308,14 @@ class SaleOrderLineInherit(models.Model):
                     record.order_id.partner_id, settlement_type=None
                 )
 
+    def _prepare_agent_vals(self, agent):
+        values = super()._prepare_agent_vals(agent)
+        rule = self.product_id.categ_id.commission_ids.filtered(lambda item: item.agent_id == agent)[:1]
+        if rule:
+            values['commission_id'] = rule.commission_id.id
+        values.update(z_commission_manual=False, z_manual_commission_id=False)
+        return values
+
     @api.onchange('product_id')
     def _onchange_product_subscription_lot(self):
         if self.product_id and self.product_id.recurring_invoice:
@@ -841,189 +328,38 @@ class SaleOrderLineInherit(models.Model):
                 }
 
     def _get_pricelist_reprice_vals(self):
+        """Use the native 19 helpers, including subscription pricing and tax mapping."""
         self.ensure_one()
-        if self.display_type or self.is_downpayment:
+        if not self.product_id or self.display_type or self.is_downpayment or not self.order_id.pricelist_id:
             return {}
-
-        order = self.order_id
-        product = self.product_id
-        if not order or not order.pricelist_id or not product:
-            return {}
-
-        pricelist = order.pricelist_id
-        uom = self.product_uom or product.uom_id
-        qty = self.product_uom_qty or 1.0
-        date = fields.Date.to_date(order.date_order) if order.date_order else fields.Date.context_today(self)
-
-        # Precio final según la tarifa (ya con reglas aplicadas)
-        price, rule_id = pricelist._get_product_price_rule(
-            product=product,
-            quantity=qty,
-            uom=uom,
-            date=date,
-            partner=order.partner_id,
+        line = self.with_company(self.company_id)
+        price = line.product_id._get_tax_included_unit_price_from_price(
+            line._get_display_price(),
+            product_taxes=line.product_id.taxes_id._filter_taxes_by_company(line.company_id),
+            fiscal_position=line.order_id.fiscal_position_id,
         )
+        discount = 0.0
+        if line.env['product.pricelist.item']._is_discount_feature_enabled() and line.pricelist_item_id._show_discount():
+            base_price = line._get_pricelist_price_before_discount()
+            if base_price:
+                value = (base_price - line._get_pricelist_price()) / base_price * 100
+                if (value > 0 and base_price > 0) or (value < 0 and base_price < 0):
+                    discount = value
+        return {'price_unit': price, 'discount': discount}
 
-        vals = {}
-
-        # 1) with_discount = "Descuento incluido en el precio"
-        #    -> solo mostramos el precio final, sin % de descuento
-        if pricelist.discount_policy == 'with_discount':
-            vals['price_unit'] = price
-            vals['discount'] = 0.0
-            return vals
-
-        # 2) without_discount = "Mostrar precio público + % descuento"
-        #    -> price_unit = precio público, discount = % para llegar a 'price'
-        public_price_company_cur = product.uom_id._compute_price(product.lst_price, uom)
-        public_price_in_order_cur = order.company_id.currency_id._convert(
-            public_price_company_cur,
-            order.currency_id,
-            order.company_id,
-            date,
-        )
-
-        if float_compare(public_price_in_order_cur, 0.0, precision_digits=6) <= 0:
-            # No hay precio público válido: usamos directamente el precio de la tarifa
-            vals['price_unit'] = price
-            vals['discount'] = 0.0
-        else:
-            disc = 100.0 * (1.0 - (price / public_price_in_order_cur))
-            disc = float_round(min(max(disc, 0.0), 100.0), precision_digits=2)
-            vals['price_unit'] = public_price_in_order_cur
-            vals['discount'] = disc
-
-        return vals
-
-    @api.onchange('product_id', 'product_uom', 'product_uom_qty')
-    def _onchange_apply_pricelist(self):
-        """
-        Aplica la tarifa solo cuando se cambia el producto, UOM o cantidad.
-        NO sobrescribe valores manuales de precio_unit o discount.
-        
-        La lógica preserva valores manuales:
-        - Si el precio fue modificado manualmente, se mantiene
-        - Si el descuento fue modificado manualmente, se mantiene
-        - Solo aplica tarifa a campos que están en valores por defecto
-        """
-        for line in self:
-            if line.is_downpayment or line.display_type:
-                continue
-            if not line.product_id:
-                continue
-            
-            # Obtener valores actuales
-            current_price = line.price_unit or 0.0
-            current_discount = line.discount or 0.0
-            default_price = line.product_id.list_price or 0.0
-            
-            # Verificar si los valores actuales son los por defecto
-            is_default_price = float_compare(current_price, 0.0, precision_digits=6) == 0 or \
-                              (default_price > 0 and float_compare(current_price, default_price, precision_digits=6) == 0)
-            is_default_discount = float_compare(current_discount, 0.0, precision_digits=2) == 0
-            
-            # Solo aplicar tarifa si al menos uno de los valores es por defecto
-            # Pero actualizar solo los campos que son por defecto
-            if is_default_price or is_default_discount:
-                vals = line._get_pricelist_reprice_vals()
-                if vals:
-                    update_vals = {}
-                    # Solo actualizar precio si es por defecto
-                    if 'price_unit' in vals and is_default_price:
-                        update_vals['price_unit'] = vals['price_unit']
-                    # Solo actualizar descuento si es por defecto
-                    if 'discount' in vals and is_default_discount:
-                        update_vals['discount'] = vals['discount']
-                    # Solo actualizar si hay algo que actualizar
-                    if update_vals:
-                        line.update(update_vals)
-
-    @api.model
-    def create(self, vals):
-        rec = super().create(vals)
-        # Solo aplicar tarifa si no se proporcionaron valores manuales de precio o descuento
-        if not rec.is_downpayment and not rec.display_type and rec.order_id.pricelist_id and rec.product_id:
-            # Si ya se proporcionaron precio_unit o discount en vals, no recalcular
-            has_manual_price = 'price_unit' in vals and vals.get('price_unit', 0) != 0
-            has_manual_discount = 'discount' in vals and vals.get('discount', 0) != 0
-            
-            if not has_manual_price and not has_manual_discount:
-                vals2 = rec._get_pricelist_reprice_vals()
-                if vals2:
-                    rec.write(vals2)
-        return rec
 
     def write(self, vals):
-        # Evitar recursión: si ya estamos en modo skip, no hacer nada más
-        if self.env.context.get('skip_pricelist_recalc', False):
-            return super().write(vals)
-        
-        # Detectar si se están modificando manualmente precio o descuento
-        is_manual_price_change = 'price_unit' in vals
-        is_manual_discount_change = 'discount' in vals
-
-        manual_price_lines = self.env['sale.order.line']
-        manual_discount_lines = self.env['sale.order.line']
-        if 'product_uom_qty' in vals and 'product_id' not in vals and 'product_uom' not in vals:
-            for line in self.filtered(lambda l: l.product_id and not l.display_type and not l.is_downpayment):
-                tariff_vals = line._get_pricelist_reprice_vals()
-                if not is_manual_price_change and 'price_unit' in tariff_vals and float_compare(
-                    line.price_unit, tariff_vals['price_unit'], precision_digits=6,
-                ) != 0:
-                    manual_price_lines |= line
-                if not is_manual_discount_change and 'discount' in tariff_vals and float_compare(
-                    line.discount, tariff_vals['discount'], precision_digits=2,
-                ) != 0:
-                    manual_discount_lines |= line
-
-        # Odoo recalcula estos campos durante el write de cantidad. Proteger los
-        # valores negociados antes del recálculo evita perderlos en ese momento.
-        with ExitStack() as stack:
-            if manual_price_lines:
-                stack.enter_context(self.env.protecting([self._fields['price_unit']], manual_price_lines))
-            if manual_discount_lines:
-                stack.enter_context(self.env.protecting([self._fields['discount']], manual_discount_lines))
-            res = super().write(vals)
-        
-        # Solo recalcular precios si se cambia producto, UOM o cantidad
-        # Y NO si el usuario está modificando manualmente precio_unit o discount
-        if any(k in vals for k in ('product_id', 'product_uom', 'product_uom_qty')):
-            # No recalcular si se están modificando manualmente precio o descuento
-            if not is_manual_price_change and not is_manual_discount_change:
-                for line in self:
-                    if line.is_downpayment or line.display_type:
-                        continue
-                    if line.order_id.pricelist_id and line.product_id:
-                        vals2 = line._get_pricelist_reprice_vals()
-                        if vals2:
-                            # Solo actualizar si los valores actuales son los por defecto
-                            update_vals = {}
-                            current_price = line.price_unit
-                            current_discount = line.discount
-                            
-                            # Calcular precio por defecto del producto
-                            default_price = line.product_id.list_price
-                            
-                            # Solo actualizar precio si es 0 o es el valor por defecto del producto
-                            if 'price_unit' in vals2:
-                                is_default_price = (
-                                    float_compare(current_price, 0.0, precision_digits=6) == 0
-                                    or (default_price > 0 and float_compare(
-                                        current_price, default_price, precision_digits=6,
-                                    ) == 0)
-                                )
-                                if line not in manual_price_lines and is_default_price:
-                                    update_vals['price_unit'] = vals2['price_unit']
-                            
-                            # Solo actualizar descuento si es 0
-                            if 'discount' in vals2:
-                                if line not in manual_discount_lines and float_compare(current_discount, 0.0, precision_digits=2) == 0:
-                                    update_vals['discount'] = vals2['discount']
-                            
-                            if update_vals:
-                                # Usar write con contexto skip para evitar recursión
-                                line.with_context(skip_pricelist_recalc=True).write(update_vals)
-        return res
+        values = dict(vals)
+        if 'discount' in values and not all(self.env.is_protected(self._fields['discount'], line) for line in self):
+            values.setdefault('jh_discount_manual', True)
+        protected = self.env['sale.order.line']
+        if 'discount' not in values and any(key in values for key in ('product_uom_qty', 'product_uom_id')) and 'product_id' not in values:
+            for line in self.filtered(lambda item: item.product_id and not item.display_type and not item.is_downpayment):
+                expected = line._get_pricelist_reprice_vals().get('discount', 0.0)
+                if line.jh_discount_manual or float_compare(line.discount, expected, precision_digits=2):
+                    protected |= line
+        with self.env.protecting([self._fields['discount']], protected):
+            return super().write(values)
 
 class SaleOrderLineAgentInherit(models.Model):
     _inherit = "sale.order.line.agent"
@@ -1042,34 +378,31 @@ class SaleOrderLineAgentInherit(models.Model):
         string="Manual commission",
         default=False,
         copy=True,
-        help="When enabled, keeps the commission selected manually by the user.",
+        help="Conserva la comision seleccionada manualmente.\nTiene prioridad sobre la categoria y la comision del agente.",
     )
     z_manual_commission_id = fields.Many2one(
         comodel_name="commission",
         string="Manual commission value",
         copy=True,
-        help="Stores the manual commission selected by the user.",
+        help="Guarda la comision elegida para esta linea.\nSe aplica cuando esta habilitada la comision manual.",
     )
 
-    @api.depends("agent_id", "z_commission_manual", "z_manual_commission_id")
+    @api.depends('agent_id', 'agent_id.commission_id', 'z_commission_manual', 'z_manual_commission_id',
+                 'object_id.product_id', 'object_id.product_id.categ_id.commission_ids.commission_id',
+                 'object_id.product_id.categ_id.commission_ids.agent_id')
     def _compute_commission_id(self):
-        """
-        Safe policy:
-        - Keep user-selected commission when it is marked as manual.
-        - Otherwise, use the agent default commission.
-        """
-        for record in self:
-            if not record.agent_id:
-                record.commission_id = False
-                continue
-            if record.z_commission_manual and record.z_manual_commission_id:
-                record.commission_id = record.z_manual_commission_id
-                continue
-            record.commission_id = record.agent_id.commission_id
+        super()._compute_commission_id()
+        for line in self:
+            if line.z_commission_manual and line.z_manual_commission_id:
+                line.commission_id = line.z_manual_commission_id
+            elif 'commission_ids' in line.object_id.product_id._fields:
+                rule = line.object_id.product_id.commission_ids.filtered(lambda item: item.agent_id == line.agent_id)[:1]
+                if rule:
+                    line.commission_id = rule.commission_id
 
     @api.model_create_multi
     def create(self, vals_list):
-        # standard Odoo version "17"
+        # Odoo 19: preserve existing manual commission flags.
         for vals in vals_list:
             if "commission_id" in vals:
                 if "z_commission_manual" not in vals:
@@ -1082,7 +415,9 @@ class SaleOrderLineAgentInherit(models.Model):
         return super().create(vals_list)
 
     def write(self, vals):
-        # standard Odoo version "17"
+        # Odoo 19: preserve existing manual commission flags.
+        if all(self.env.is_protected(self._fields['commission_id'], record) for record in self):
+            return super().write(vals)
         safe_vals = dict(vals)
         if "commission_id" in safe_vals:
             if "z_commission_manual" not in safe_vals:
@@ -1094,79 +429,36 @@ class SaleOrderLineAgentInherit(models.Model):
             safe_vals["z_manual_commission_id"] = False
         return super().write(safe_vals)
 
-    @api.depends(
-        "commission_id",
-        "z_commission_manual",
-        "object_id.price_subtotal",
-        "object_id.product_id",
-        "object_id.product_uom_qty",
-    )
-    def _compute_amount(self):
-        """
-        Keep manual commission untouched and only auto-assign product/category
-        commission when the line is not marked as manual.
-        """
-        for line in self:
-            order_line = line.object_id
-            commission = line.commission_id
-            product = order_line.product_id
 
-            if (
-                not line.z_commission_manual
-                and product
-                and "commission_ids" in product._fields
-                and product.commission_ids.filtered(
-                    lambda c: c.agent_id.id == line.agent_id.id
-                )
-            ):
-                commission = product.commission_ids.filtered(
-                    lambda c: c.agent_id.id == line.agent_id.id
-                )[0].commission_id
-                line.commission_id = commission
-            elif (
-                not line.z_commission_manual
-                and product
-                and product.categ_id
-                and "commission_ids" in product.categ_id._fields
-                and product.categ_id.commission_ids.filtered(
-                    lambda c: c.agent_id.id == line.agent_id.id
-                )
-            ):
-                commission = product.categ_id.commission_ids.filtered(
-                    lambda c: c.agent_id.id == line.agent_id.id
-                )[0].commission_id
-                line.commission_id = commission
-
-            line.amount = line._get_commission_amount(
-                commission,
-                order_line.price_subtotal,
-                product,
-                order_line.product_uom_qty,
-            )
-
-class AccountMoveSendInherit(models.TransientModel):
-    _inherit = 'account.move.send'
+class AccountMoveSendWizardInherit(models.TransientModel):
+    _inherit = 'account.move.send.wizard'
 
     partner_id = fields.Many2one(
         comodel_name='res.partner',
         string="Partner",
         compute='_compute_partner_ids',
-        store=True
+        store=True,
+        help='Contacto de la factura que se va a enviar.\nDelimita los destinatarios disponibles en el asistente.'
     )
 
     commercial_partner_id = fields.Many2one(
         comodel_name='res.partner',
         string="Commercial Partner",
         compute='_compute_partner_ids',
-        store=True
+        store=True,
+        help='Empresa principal del contacto facturado.\nPermite seleccionar sus contactos de facturacion y entrega.'
     )
 
-    @api.depends('move_ids')
+    @api.depends('move_id', 'move_id.partner_id')
     def _compute_partner_ids(self):
         for wizard in self:
-            move = wizard.move_ids[:1]
+            move = wizard.move_id
             wizard.partner_id = move.partner_id
             wizard.commercial_partner_id = move.partner_id.commercial_partner_id
+
+
+class AccountMoveSendInherit(models.AbstractModel):
+    _inherit = 'account.move.send'
 
     @api.model
     def _send_mail(self, move, mail_template, **kwargs):

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <record id="res_partner_form_view_commission_product" model="ir.ui.view">
+        <field name="name">res.partner.common.form.commission.product</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="commission_oca.view_partner_form_agent" />
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='agent_information']" position="inside">
+                <field name="commission_category_ids" groups="commission_oca.group_commission_manager" invisible="not agent">
+                    <list editable="bottom">
+                        <field name="categ_id"/>
+                        <field name="commission_id"/>
+                    </list>
+                </field>
+            </xpath>
+        </field>
+    </record>
+</odoo>

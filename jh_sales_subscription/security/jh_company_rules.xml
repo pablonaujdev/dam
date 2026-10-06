@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="jh_client_sheet_company_rule" model="ir.rule">
+        <field name="name">MIAC: histórico automático por compañía</field>
+        <field name="model_id" ref="model_jh_client_sheet"/>
+        <field name="domain_force">[('jh_company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="jh_advice_company_rule" model="ir.rule">
+        <field name="name">MIAC: destinatarios por compañía</field>
+        <field name="model_id" ref="model_jh_sales_subscription_advice"/>
+        <field name="domain_force">[('jh_company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="jh_notification_company_rule" model="ir.rule">
+        <field name="name">MIAC: avisos por compañía</field>
+        <field name="model_id" ref="model_jh_subscription_renewal_notification"/>
+        <field name="domain_force">[('jh_company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="jh_manual_sheet_partner_company_rule" model="ir.rule">
+        <field name="name">MIAC: histórico manual de contactos permitidos</field>
+        <field name="model_id" ref="model_jh_client_sheet_manual"/>
+        <field name="domain_force">['|', ('parent_id.company_id', '=', False), ('parent_id.company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="jh_visit_partner_company_rule" model="ir.rule">
+        <field name="name">MIAC: visitas de contactos permitidos</field>
+        <field name="model_id" ref="model_jh_visit"/>
+        <field name="domain_force">['|', ('partner_id.company_id', '=', False), ('partner_id.company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

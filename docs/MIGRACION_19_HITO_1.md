@@ -114,3 +114,12 @@ usuario se utilizaron directamente.
 - [OCA/bank-payment](https://github.com/OCA/bank-payment/tree/fdd5d4040b235a4c688b2aec30611d57dd246b64): `fdd5d4040b235a4c688b2aec30611d57dd246b64`.
 - [OCA/account-financial-reporting](https://github.com/OCA/account-financial-reporting/tree/b26d1233d3d24536e51dddef416939a6cbf9a1fc): `b26d1233d3d24536e51dddef416939a6cbf9a1fc`.
 - [OCA/community-data-files](https://github.com/OCA/community-data-files/tree/6866ed6392b1c278a0ad44e3f9dbc11294d756dc): `6866ed6392b1c278a0ad44e3f9dbc11294d756dc`.
+
+
+## Continuacion de jh_sales_subscription en staging_v19
+
+La adaptacion de codigo de suscripciones y sus dependencias se documenta en
+[MIGRACION_JH_SUBSCRIPTION_19.md](MIGRACION_JH_SUBSCRIPTION_19.md).
+Tiene validacion estatica y pruebas de helpers; la instalacion limpia, actualizacion
+sobre la copia migrada y aceptacion funcional siguen pendientes. No cambia el
+estado funcional pendiente de los tres componentes revisados anteriormente.

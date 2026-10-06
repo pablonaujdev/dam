@@ -1,34 +1,15 @@
-# -*- coding: utf-8 -*-
-import time
-import logging
-from psycopg2 import errors
 from odoo import models, api, fields
+from odoo.tools import SQL
 from odoo.exceptions import UserError
-try:
-    # Odoo 14+ suele traer esto aquí
-    from odoo.tools.misc import split_every as _split_every
-except Exception:
-    # Fallback simple si no existiera en tu build
-    def _split_every(n, seq):
-        for i in range(0, len(seq), n):
-            yield seq[i:i+n]
-
+import logging
 
 _logger = logging.getLogger(__name__)
-
-ADVISORY_KEY_IVA = 0x4A485F495641  # 64-bit
-BATCH_SIZE = 400                   # ajusta (100-800)
-MAX_RETRIES = 3
-TIME_BUDGET_SEC = 50               # ~ <60s por corrida
-MAX_BATCHES_PER_RUN = 10           # salvaguarda adicional
-CURSOR_PARAM_KEY = 'aml_iva_recalc_last_id'
 
 class AccountInvoiceReportInherit (models.Model):
     _inherit = 'account.invoice.report'
 
 
     jh_invoice_date = fields.Date(string='Fecha de Factura', readonly=True)
-    currency_id = fields.Many2one('res.currency', related='move_id.currency_id', store=False)
     jh_commission = fields.Float(string='Importe Comisión', readonly=True)
     jh_commission_percent = fields.Float(string='% Comisión', readonly=True)
     jh_agents = fields.Char(string='Agentes', readonly=True)
@@ -57,7 +38,7 @@ class AccountInvoiceReportInherit (models.Model):
 
     def _select(self):
         original = super()._select()
-        return original + ''',
+        return SQL("%s" + ''',
             move.invoice_date AS jh_invoice_date,
             line.jh_commission,
             line.jh_commission_percent,
@@ -93,25 +74,8 @@ class AccountInvoiceReportInherit (models.Model):
                  AND sml.lot_id IS NOT NULL
                  LIMIT 1)
             ) AS jh_serial_number
-        '''
+        ''', original)
 
-    def _group_by(self):
-        original = super()._group_by()
-        return original + ''',
-            line.jh_commission_settlement_date,
-            partner.country_id AS jh_country_id,
-            partner.state_id AS jh_state_id,
-            line.jh_tax_id,
-            line.jh_tax_amount,
-            line.jh_new_tax,
-            partner.country_id,
-            partner.state_id,
-            line.jh_cost_unit,
-            move.invoice_date,
-            move.partner_shipping_id,
-            move.payment_mode_id,
-            move.invoice_payment_term_id
-        '''
 
 
 class AccountMoveLine(models.Model):
@@ -189,121 +153,26 @@ class AccountMoveLine(models.Model):
         compute_sudo=True,  # <— IMPORTANTE
     )
 
-    @api.depends_context('company')
-    @api.depends(
-        'product_id',
-        'product_id.uom_id',
-        'product_id.product_tmpl_id',
-        'product_uom_id',
-        'display_type',
-        'company_id',
-        'move_id.company_id',
-        'move_id.invoice_date',
-        'move_id.move_type',
-    )
+    @api.depends('product_id', 'product_id.standard_price', 'product_uom_id', 'company_id', 'display_type')
     def _compute_jh_cost_unit(self):
-        # Evita escribir 0 mientras levanta el registry
-        if not self.env.registry.ready:
-            _logger.debug("[COST] Registry no listo; se omite cómputo.")
-            return
+        for line in self:
+            cost = 0.0
+            if line.product_id and line.display_type in (False, 'product'):
+                product = line.product_id.with_company(line.company_id)
+                cost = product.uom_id._compute_price(product.standard_price, line.product_uom_id or product.uom_id)
+            line.jh_cost_unit = cost
 
-        cr = self.env.cr
-        for l in self:
-            try:
-                # Log inicial por línea
-                _logger.debug(
-                    "[COST] START aml=%s move=%s display_type=%s product_id=%s uom_line=%s company(line)=%s company(move)=%s",
-                    l.id, l.move_id.id if l.move_id else None, l.display_type,
-                    l.product_id.id if l.product_id else None,
-                    l.product_uom_id.id if l.product_uom_id else None,
-                    l.company_id.id if l.company_id else None,
-                    l.move_id.company_id.id if l.move_id and l.move_id.company_id else None,
-                )
-
-                # Solo tratar como sección/nota explícitamente
-                if getattr(l, 'display_type', False) in ('line_section', 'line_note'):
-                    l.jh_cost_unit = 0.0
-                    _logger.debug("[COST] aml=%s es sección/nota => costo=0.0", l.id)
-                    continue
-
-                # Si aún no hay producto, no forzar 0: permite recomputo posterior
-                if not l.product_id:
-                    _logger.debug("[COST] aml=%s sin product_id aún; no se escribe costo.", l.id)
-                    continue
-
-                # Compañía efectiva
-                company = (l.move_id.company_id or l.company_id or self.env.company)
-                product = l.product_id.with_context(force_company=company.id).sudo()
-                tmpl = product.product_tmpl_id.with_context(force_company=company.id).sudo()
-
-                # 1) Intento por standard_price (variante -> plantilla)
-                cost = product.standard_price or tmpl.standard_price or 0.0
-                _logger.debug("[COST] aml=%s std_price inicial=%s (company=%s)", l.id, cost, company.id)
-
-                # 2) Fallback duro a ir.property (product.product)
-                if not cost:
-                    cr.execute("""
-                               SELECT value_float
-                               FROM ir_property
-                               WHERE name = 'standard_price'
-                                 AND (type = 'float' OR type IS NULL)
-                                 AND res_id = %s
-                                 AND (company_id = %s OR company_id IS NULL)
-                               ORDER BY company_id NULLS LAST LIMIT 1
-                               """, (f'product.product,{product.id}', company.id))
-                    row = cr.fetchone()
-                    cost = row[0] if row and row[0] is not None else 0.0
-                    _logger.debug("[COST] aml=%s ir.property -> product.product => %s", l.id, cost)
-
-                # 3) Fallback ir.property (product.template)
-                if not cost:
-                    cr.execute("""
-                               SELECT value_float
-                               FROM ir_property
-                               WHERE name = 'standard_price'
-                                 AND (type = 'float' OR type IS NULL)
-                                 AND res_id = %s
-                                 AND (company_id = %s OR company_id IS NULL)
-                               ORDER BY company_id NULLS LAST LIMIT 1
-                               """, (f'product.template,{tmpl.id}', company.id))
-                    row = cr.fetchone()
-                    cost = row[0] if row and row[0] is not None else 0.0
-                    _logger.debug("[COST] aml=%s ir.property -> product.template => %s", l.id, cost)
-
-                # 4) Si es venta y sigue 0, último precio de compra (Vendor Bill) en la misma compañía
-                if (not cost) and l.move_id and l.move_id.move_type in ('out_invoice', 'out_refund'):
-                    invoice_date = l.move_id.invoice_date or fields.Date.context_today(self)
-                    cr.execute("""
-                               SELECT aml.price_unit
-                               FROM account_move_line aml
-                                        JOIN account_move m ON m.id = aml.move_id
-                               WHERE aml.product_id = %s
-                                 AND m.company_id = %s
-                                 AND m.state = 'posted'
-                                 AND m.move_type IN ('in_invoice', 'in_refund')
-                                 AND (m.invoice_date IS NULL OR m.invoice_date <= %s)
-                               ORDER BY COALESCE(m.invoice_date, m.date) DESC, aml.id DESC LIMIT 1
-                               """, (product.id, company.id, invoice_date))
-                    row = cr.fetchone()
-                    last_cost = float(row[0]) if row and row[0] is not None else 0.0
-                    _logger.debug("[COST] aml=%s último costo compra=%s hasta=%s", l.id, last_cost, invoice_date)
-                    cost = last_cost or 0.0
-
-                # 5) Conversión de UoM si difiere
-                if cost and l.product_uom_id and l.product_uom_id != product.uom_id:
-                    prev = cost
-                    cost = product.uom_id._compute_price(cost, l.product_uom_id)
-                    _logger.debug("[COST] aml=%s UoM convert %s -> %s (from %s to %s)",
-                                  l.id, prev, cost, product.uom_id.id, l.product_uom_id.id)
-
-                l.jh_cost_unit = cost or 0.0
-                _logger.info("[COST] DONE aml=%s costo=%s", l.id, l.jh_cost_unit)
-
-            except Exception as e:
-                # Evitar fijar 0 si no era sección/nota; reportar error
-                _logger.warning("[COST] ERROR aml=%s: %s", getattr(l, 'id', None), e)
-                if getattr(l, 'display_type', False) in ('line_section', 'line_note'):
-                    l.jh_cost_unit = 0.0
+    @api.depends('price_unit', 'quantity', 'discount', 'tax_ids', 'currency_id', 'move_id.move_type')
+    def _compute_tax_amount(self):
+        for line in self:
+            result = line.tax_ids.compute_all(
+                line.price_unit * (1 - line.discount / 100),
+                currency=line.currency_id, quantity=line.quantity,
+                product=line.product_id, partner=line.partner_id,
+                is_refund=line.move_id.move_type in ('out_refund', 'in_refund'),
+            )
+            amount = result['total_included'] - result['total_excluded']
+            line.jh_tax_amount = -amount if line.move_id.move_type in ('out_refund', 'in_refund') else amount
 
     @api.depends('price_subtotal', 'tax_ids', 'move_id.move_type')
     def _compute_new_tax(self):
@@ -432,6 +301,7 @@ class AccountMoveLine(models.Model):
             )[:1]
             line.jh_tax_id = tax[0].id if tax else False
 
+    @api.depends('agent_ids.settlement_line_ids.settlement_id.create_date')
     def _compute_commission_settlement_date(self):
         for record in self:
             settlement_lines = self.env['commission.settlement.line'].search([
@@ -442,37 +312,29 @@ class AccountMoveLine(models.Model):
 
     @api.model
     def _cron_recalcular_fecha_liquidacion(self):
-        _logger.info("Iniciando acción planificada: recalcular fecha de liquidación de comisión")
-
-        try:
-            # Buscar líneas de liquidación
-            settlement_lines = self.env['commission.settlement.line'].search([])
-            _logger.info(f"Se encontraron {len(settlement_lines)} líneas de liquidación")
-
-            # Extraer IDs de líneas de factura
-            invoice_line_ids = settlement_lines.mapped('invoice_line_id').ids
-            _logger.info(f"Se encontraron {len(invoice_line_ids)} líneas de factura vinculadas")
-
-            # Buscar líneas contables
-            lines = self.env['account.move.line'].browse(invoice_line_ids)
-            _logger.info(f"Procesando {len(lines)} líneas contables")
-
-            # Ejecutar cálculo
-            for line in lines:
-                try:
-                    _logger.debug(f"Procesando línea contable ID {line.id}")
-                    line._compute_commission_settlement_date()
-                    _logger.debug(f"Línea {line.id} actualizada con fecha {line.jh_commission_settlement_date}")
-                except Exception as line_error:
-                    _logger.warning(f"Error en línea {line.id}: {line_error}")
-
-            _logger.info(" Acción planificada completada correctamente")
-
-        except Exception as e:
-            _logger.error(f" Error general en acción planificada de comisión: {e}")
+        domain = [('agent_ids', '!=', False)]
+        scheduled = bool(self.env.context.get('cron_id'))
+        parameters = self.env['ir.config_parameter'].sudo()
+        key = 'jh_sales_subscription.settlement_date_cursor'
+        last_id = int(parameters.get_param(key, '0')) if scheduled else 0
+        processed = 0
+        if scheduled:
+            self.env['ir.cron']._commit_progress(remaining=self.search_count(domain + [('id', '>', last_id)]))
+        while lines := self.search(domain + [('id', '>', last_id)], order='id', limit=400):
+            lines._compute_commission_settlement_date()
+            processed += len(lines)
+            last_id = lines[-1].id
+            if scheduled:
+                parameters.set_param(key, last_id)
+                if not self.env['ir.cron']._commit_progress(len(lines)):
+                    return processed
+        if scheduled:
+            parameters.set_param(key, 0)
+            self.env['ir.cron']._commit_progress(remaining=0)
+        return processed
 
 
-    @api.depends('product_id')
+    @api.depends('product_id', 'agent_ids.amount', 'agent_ids.agent_id.name', 'agent_ids.commission_id')
     def _compute_jh_agents_commission(self):
         for record in self:
             agent_names = set()
@@ -503,7 +365,7 @@ class AccountMoveLine(models.Model):
                     percent = sum(section.percent or 0.0 for section in commission.section_ids)
 
                 # Validar que el monto sea positivo y el porcentaje válido
-                if agent_line.amount and agent_line.amount > 0.0 and percent > 0.0:
+                if agent_line.amount and percent > 0.0:
                     agent_names.add(agent_line.agent_id.name)
                     commission_amount += agent_line.amount
                     commission_percent = percent  # si hay múltiples, puedes promediar o mostrar el primero
@@ -514,180 +376,28 @@ class AccountMoveLine(models.Model):
 
 
 
-    @api.model
-    def _get_recalc_cursor(self):
-        icp = self.env['ir.config_parameter'].sudo()
-        val = icp.get_param(CURSOR_PARAM_KEY)
-        try:
-            return int(val) if val else 0
-        except Exception:
-            return 0
 
-    @api.model
-    def _set_recalc_cursor(self, last_id):
-        self.env['ir.config_parameter'].sudo().set_param(CURSOR_PARAM_KEY, str(int(last_id or 0)))
 
     # ---------------------------
     # Selector por lotes (pendientes)
     # ---------------------------
-    @api.model
-    def _claim_ids_pending_skip_locked(self, limit, min_id=0):
-        """
-        Toma IDs pendientes (jh_tax_recalc_done = false or NULL) con impuestos,
-        por encima de min_id, con FOR UPDATE SKIP LOCKED.
-        """
-        sql = """
-            SELECT aml.id
-              FROM account_move_line aml
-         LEFT JOIN account_move_line_account_tax_rel rel
-                ON rel.account_move_line_id = aml.id
-             WHERE aml.id > %s
-               AND (aml.jh_tax_recalc_done IS NOT TRUE)
-               AND rel.account_tax_id IS NOT NULL
-               AND COALESCE(aml.price_subtotal, aml.balance, 0) <> 0
-          ORDER BY aml.id
-             FOR UPDATE SKIP LOCKED
-             LIMIT %s
-        """
-        self.env.cr.execute(sql, (min_id, limit))
-        return [r[0] for r in self.env.cr.fetchall()]
 
     # ---------------------------
     # Cron por bloques (cada minuto)
     # ---------------------------
     @api.model
     def cron_recalcular_valor_iva(self):
-        start_ts = time.time()
-
-        # Evitar solapamiento
-        self.env.cr.execute("SELECT pg_try_advisory_lock(%s)", (ADVISORY_KEY_IVA,))
-        if not self.env.cr.fetchone()[0]:
-            _logger.info("Otro worker ya ejecuta cron_recalcular_valor_iva; salgo.")
-            return
-
-        last_id = self._get_recalc_cursor()
-        total_proc = 0
-        batches = 0
-
-        try:
-            while True:
-                # Presupuestos
-                if (time.time() - start_ts) >= TIME_BUDGET_SEC:
-                    _logger.info("Presupuesto de tiempo agotado (~%ss). Corto.", TIME_BUDGET_SEC)
-                    break
-                if batches >= MAX_BATCHES_PER_RUN:
-                    _logger.info("Máx. lotes por corrida alcanzado (%s). Corto.", MAX_BATCHES_PER_RUN)
-                    break
-
-                # 1) Intento desde el cursor hacia adelante
-                ids = self._claim_ids_pending_skip_locked(BATCH_SIZE, min_id=last_id)
-
-                # 2) Si no hay más por encima del cursor, reinicio cursor y pruebo desde el inicio
-                if not ids:
-                    if last_id != 0:
-                        last_id = 0
-                        ids = self._claim_ids_pending_skip_locked(BATCH_SIZE, min_id=last_id)
-                    # 3) Si tampoco hay desde 0, no quedan pendientes
-                    if not ids:
-                        _logger.info("No quedan líneas pendientes de recalcular IVA.")
-                        break
-
-                # Procesar lote
-                batches += 1
-                last_id = ids[-1]
-
-                for attempt in range(1, MAX_RETRIES + 1):
-                    try:
-                        with self.env.cr.savepoint():
-                            lines = self.with_context(prefetch_fields=False, recompute=False).browse(ids)
-
-                            # Calcula y acumula updates
-                            values_tax = []
-                            ids_done = []
-                            for ln in lines:
-                                try:
-                                    # calcula tu campo jh_new_tax con tu compute preferido:
-                                    ln._compute_new_tax()
-                                    values_tax.append((ln.jh_new_tax, ln.id))
-                                    ids_done.append(ln.id)
-                                except Exception as e:
-                                    _logger.warning("Error en línea %s: %s", ln.id, e)
-
-                            if values_tax:
-                                # Persistir jh_new_tax en BD (opcional si es store=True ya lo hace, pero acelera)
-                                self.env.cr.executemany(
-                                    "UPDATE account_move_line SET jh_new_tax = %s WHERE id = %s",
-                                    values_tax
-                                )
-
-                            # 2b) Actualizar jh_tax_id (evitar ordenar por name por campo JSON)
-                            if ids:
-                                self.env.cr.execute("""
-                                                    WITH ranked AS (SELECT rel.account_move_line_id AS aml_id,
-                                                                           t.id                     AS tax_id,
-                                                                           ROW_NUMBER()                OVER (
-                                                PARTITION BY rel.account_move_line_id
-                                                ORDER BY t.sequence NULLS LAST, t.id
-                                            ) AS rn
-                                                                    FROM account_move_line_account_tax_rel rel
-                                                                             JOIN account_tax t
-                                                                                  ON t.id = rel.account_tax_id
-                                                                    WHERE rel.account_move_line_id = ANY (%s))
-                                                    UPDATE account_move_line aml
-                                                    SET jh_tax_id = ranked.tax_id FROM ranked
-                                                    WHERE aml.id = ranked.aml_id
-                                                      AND ranked.rn = 1
-                                                    """, (ids,))
-
-                            # 3) Actualizar COSTO (standard_price company-dependent)
-                            if ids:
-                                self.env.cr.execute("""
-                                                    UPDATE account_move_line aml
-                                                    SET jh_cost_unit = COALESCE((SELECT ip.value_float
-                                                                                 FROM ir_property ip
-                                                                                 WHERE ip.name = 'standard_price'
-                                                                                   AND ip.type = 'float'
-                                                                                   AND ip.res_id = 'product.product,' || aml.product_id
-                                                                                ::text
-                                                                                    AND
-                                                                                (ip.company_id = aml.company_id OR ip.company_id IS NULL)
-                                                                                ORDER BY ip.company_id NULLS LAST
-                                                                                LIMIT 1 ), 0)
-                                                    WHERE aml.id = ANY (%s)
-                                                    """, (ids,))
-
-                            if ids_done:
-                                # Marcar como hechos
-                                self.env.cr.execute(
-                                    "UPDATE account_move_line SET jh_tax_recalc_done = TRUE WHERE id = ANY(%s)",
-                                    (ids_done,)
-                                )
-
-                        self.env.cr.commit()
-                        total_proc += len(ids_done)
-                        break  # lote OK
-                    except (errors.DeadlockDetected, errors.SerializationFailure) as e:
-                        _logger.warning(
-                            "Deadlock/Serialization %s..%s (intento %s/%s): %s",
-                            ids[0], ids[-1], attempt, MAX_RETRIES, e
-                        )
-                        self.env.cr.rollback()
-                        if attempt >= MAX_RETRIES:
-                            _logger.error("Desisto del lote %s..%s", ids[0], ids[-1])
-
-            # Guardar cursor
-            self._set_recalc_cursor(last_id)
-            _logger.info(
-                "cron_recalcular_valor_iva: %s líneas marcadas como done en %s lote(s). Último ID=%s",
-                total_proc, batches, last_id
-            )
-
-        except Exception as e:
-            self.env.cr.rollback()
-            _logger.error("Error general en cron_recalcular_valor_iva: %s", e)
-        finally:
-            # Liberar lock
-            try:
-                self.env.cr.execute("SELECT pg_advisory_unlock(%s)", (ADVISORY_KEY_IVA,))
-            except Exception:
-                pass
+        domain = [('display_type', '=', 'product'), ('jh_tax_recalc_done', '=', False)]
+        cron = self.env['ir.cron']
+        if self.env.context.get('cron_id'):
+            cron._commit_progress(remaining=self.search_count(domain))
+        processed = 0
+        while lines := self.search(domain, order='id', limit=400):
+            for field_name in ('jh_new_tax', 'jh_tax_id', 'jh_tax_amount', 'jh_cost_unit'):
+                self.env.add_to_compute(self._fields[field_name], lines)
+            lines._recompute_recordset(['jh_new_tax', 'jh_tax_id', 'jh_tax_amount', 'jh_cost_unit'])
+            lines.write({'jh_tax_recalc_done': True})
+            processed += len(lines)
+            if self.env.context.get('cron_id') and not cron._commit_progress(len(lines)):
+                break
+        return processed

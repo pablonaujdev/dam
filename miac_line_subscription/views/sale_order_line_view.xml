@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <record id="sale_order_line_view_search_inherit_state" model="ir.ui.view">
+        <field name="name">sale.order.line.search.inherit.state</field>
+        <field name="model">sale.order.line</field>
+        <field name="inherit_id" ref="sale.view_sales_order_line_filter"/>
+        <field name="priority">50</field>
+        <field name="arch" type="xml">
+          <xpath expr="//filter[@name='salesperson']" position="after">
+            <filter string="subscription State" name="group_subscription_state" domain="[]" context="{'group_by':'subscription_state'}"/>
+          </xpath>
+        </field>
+    </record>
+
+    <record id="view_order_line_subscriptions_tree" model="ir.ui.view">
+        <field name="name">sale.order.line.list</field>
+        <field name="model">sale.order.line</field>
+        <field name="arch" type="xml">
+            <list string="Licences" create="false" delete="false">
+                <field name="order_partner_id"/>
+                <field name="order_id"/>
+                <field name="product_id"/>
+                <field name="start_date" optional="hide"/>
+                <field name="end_date"/>
+                <field name="subscription_state" optional="hide"/>
+                <field name="subscription_id" optional="show"/>
+                <field name="order_renove" optional="hide"/>
+                <field name="categ_id"/>
+                <field name="lot_id"/>
+                <button name="link_to_machine" icon="fa-gear" type="object"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="sale_subscription_lines_action" model="ir.actions.act_window">
+        <field name="name">Licences</field>
+        <field name="res_model">sale.order.line</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('subscription_state', '!=', False),('product_id.recurring_invoice','=',True)]</field>
+        <field name="context">{'create': False}</field>
+        <field name="view_ids" eval="[(5, 0, 0),
+                (0, 0, {'view_mode': 'list', 'view_id': ref('view_order_line_subscriptions_tree'), 'sequence': 1}),
+                (0, 0, {'view_mode': 'form'}),
+            ]"/>
+    </record>
+
+    <menuitem action="sale_subscription_lines_action" id="menu_sale_subscription_lines" sequence="40" parent="sale_subscription.menu_sale_subscription"/>
+
+
+</odoo>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <record id="sale_order_view_form_inherit_cancel_reason" model="ir.ui.view">
+        <field name="name">sale.order.form.inherit.cancel.reason</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form" />
+        <field name="priority">50</field>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Cancelation Reason" name="subscriptions_info" invisible="not cancelation_reason">
+                    <field name="cancelation_reason"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

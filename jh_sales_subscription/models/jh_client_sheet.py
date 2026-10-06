@@ -1,71 +1,44 @@
-from odoo import models, api, fields
+from odoo import models, fields
+from odoo.tools import SQL
 from odoo.exceptions import UserError
-import logging
-
-_logger = logging.getLogger(__name__)
 
 
 class ResPartnerInherit(models.Model):
     _inherit = 'res.partner'
 
-    jh_client_sheet_ids = fields.One2many('jh.client.sheet',
-                                          'parent_id',
-                                          string='Histórico de Ventas',
-                                          compute='_compute_jh_client_sheet_ids',
-                                          store=False)
+    jh_client_sheet_ids = fields.One2many(
+        'jh.client.sheet', 'parent_id', string='Histórico de Ventas', readonly=True,
+        help='Consulta las ventas contabilizadas del contacto.\nLos abonos conservan el signo negativo del histórico MIAC.')
 
-    def _compute_jh_client_sheet_ids(self):
-        for record in self:
-            if not record.id:
-                record.jh_client_sheet_ids = [(6, 0, [])]
-                continue
 
-            # 1) limpiar
-            self.env.cr.execute("""
-                DELETE FROM jh_client_sheet WHERE parent_id = %s
-            """, [record.id])
-
-            # 2) (opción A) insertar en bloque con INSERT...SELECT  (más rápido)
-            self.env.cr.execute("""
-                INSERT INTO jh_client_sheet
-                    (parent_id, jh_date, jh_account_move, jh_product_id, jh_quantity_sold, jh_amount_bruto, jh_sale_lot_id)
-                SELECT
-                    %s as parent_id,
-                    a."date",
-                    b.id,
-                    a.product_id,
-                    CASE WHEN b.name ILIKE %s THEN (a.quantity * -1) ELSE a.quantity END,
-                    CASE WHEN b.name ILIKE %s THEN (a.price_subtotal * -1) ELSE a.price_subtotal END,
-                    a.sale_lot_id
-                FROM account_move_line a
-                JOIN account_move b ON a.move_id = b.id
-                WHERE a.product_id IS NOT NULL
-                  AND (b.name ILIKE %s OR b.name ILIKE %s)
-                  AND a.partner_id = %s
-                  and b.state = 'posted'
-                ORDER BY a.date DESC
-            """, [record.id, 'RFV%', 'RFV%', 'FV%', 'RFV%', record.id])
-
-            # 3) cargar ids insertados y ASIGNAR el compute
-            self.env.cr.execute("""
-                SELECT id FROM jh_client_sheet WHERE parent_id = %s ORDER BY jh_date DESC, id
-            """, [record.id])
-            ids = [row[0] for row in self.env.cr.fetchall()]
-
-            record.jh_client_sheet_ids = [(6, 0, ids)]
-
-class jh_client_sheet(models.Model):
+class JhClientSheet(models.Model):
     _name = 'jh.client.sheet'
     _description = 'Histórico de ventas por cliente/producto'
+    _auto = False
     _order = 'jh_quantity_sold desc'
 
-    parent_id = fields.Many2one('res.partner', string='Cliente', index=True, ondelete='cascade')
-    jh_date = fields.Date(string='Fecha')
-    jh_account_move = fields.Many2one('account.move', string='Factura')
-    jh_product_id = fields.Many2one('product.product', string='Producto')
-    jh_quantity_sold = fields.Float(string='Cantidad Vendida')
-    jh_amount_bruto = fields.Float(string='Importe Ventas (Sin IVA)')
-    jh_sale_lot_id = fields.Char(string='Lote Num Serie')
+    parent_id = fields.Many2one('res.partner', string='Cliente', readonly=True)
+    jh_date = fields.Date(string='Fecha', readonly=True)
+    jh_account_move = fields.Many2one('account.move', string='Factura', readonly=True)
+    jh_product_id = fields.Many2one('product.product', string='Producto', readonly=True)
+    jh_quantity_sold = fields.Float(string='Cantidad Vendida', readonly=True)
+    jh_amount_bruto = fields.Float(string='Importe Ventas (Sin IVA)', readonly=True)
+    jh_sale_lot_id = fields.Char(string='Lote Num Serie', readonly=True)
+    jh_company_id = fields.Many2one('res.company', readonly=True,
+        help='Compañía de la factura de origen.\nLimita la consulta a las compañías permitidas al usuario.')
+
+    @property
+    def _table_query(self):
+        return SQL("""
+            SELECT line.id, line.partner_id AS parent_id, line.date AS jh_date,
+                   move.id AS jh_account_move, line.product_id AS jh_product_id,
+                   CASE WHEN move.name ILIKE %s THEN -line.quantity ELSE line.quantity END AS jh_quantity_sold,
+                   CASE WHEN move.name ILIKE %s THEN -line.price_subtotal ELSE line.price_subtotal END AS jh_amount_bruto,
+                   line.sale_lot_id AS jh_sale_lot_id, line.company_id AS jh_company_id
+              FROM account_move_line line JOIN account_move move ON move.id = line.move_id
+             WHERE line.product_id IS NOT NULL AND move.state = 'posted'
+               AND (move.name ILIKE %s OR move.name ILIKE %s)
+        """, 'RFV%', 'RFV%', 'FV%', 'RFV%')
 
     def action_invoice_pdf(self):
         """Abre la factura en PDF (misma lógica que el botón de imprimir factura)."""

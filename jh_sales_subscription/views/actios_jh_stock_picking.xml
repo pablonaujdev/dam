@@ -4,13 +4,13 @@
 
         <record id="view_stock_picking_partner_product_tree" model="ir.ui.view">
         <field name="name">
-            stock.picking.partner.product.tree
+            stock.picking.partner.product.list
         </field>
 
         <field name="model">stock.picking</field>
 
         <field name="arch" type="xml">
-            <tree
+            <list
                 string="Movimientos de stock del contacto"
                 create="false"
                 delete="false">
@@ -53,7 +53,7 @@
                     string="Estado"
                     widget="badge"/>
 
-            </tree>
+            </list>
         </field>
     </record>
 

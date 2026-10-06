@@ -40,9 +40,9 @@ class ResPartner(models.Model):
             'type': 'ir.actions.act_window',
             'name': _('Suscripciones en esta dirección'),
             'res_model': 'sale.order',
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'views': [
-                (self.env.ref('sale_subscription.sale_subscription_view_tree').id, 'tree'),
+                (self.env.ref('sale_subscription.sale_subscription_view_tree').id, 'list'),
                 (self.env.ref('sale_subscription.sale_subscription_primary_form_view').id, 'form'),
             ],
             'domain': [

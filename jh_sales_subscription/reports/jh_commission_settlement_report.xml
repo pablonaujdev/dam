@@ -4,8 +4,8 @@
         <!-- Heredar la plantilla del reporte de liquidación de comisiones -->
         <!-- Esta herencia se aplica después de account_commission que agrega Invoice line y Quantity -->
         <!-- Odoo aplicará las herencias en orden, así que nuestras columnas se agregarán después de las de account_commission -->
-        <template id="report_settlement_document_jh" inherit_id="commission.report_settlement_document">
-            
+        <template id="report_settlement_document_jh" inherit_id="commission_oca.report_settlement_document">
+
             <!-- Agregar nuevas columnas en el encabezado de la tabla -->
             <!-- Agregar después de la última columna (puede ser Amount settled o Quantity si existe account_commission) -->
             <xpath expr="//table[@name='invoice_line_table']//thead//tr//th[last()]" position="after">
@@ -16,7 +16,7 @@
                 <th class="text-start">Forma Pago</th>
                 <th class="text-start">Condiciones Pago</th>
             </xpath>
-            
+
             <!-- Agregar las celdas de datos en cada fila de la tabla -->
             <!-- Agregar después de la última celda de datos -->
             <xpath expr="//table[@name='invoice_line_table']//tbody//tr//td[last()]" position="after">
@@ -39,7 +39,7 @@
                     <span t-esc="l.jh_invoice_id and l.jh_invoice_id.invoice_payment_term_id and l.jh_invoice_id.invoice_payment_term_id.name or ''"/>
                 </td>
             </xpath>
-            
+
             <!-- Agregar celdas vacías en el footer para mantener el formato -->
             <!-- Agregar después de la celda vacía inicial, antes de "Total" -->
             <xpath expr="//table[@name='invoice_line_table']//tfoot//tr//td[1]" position="after">

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <record id="product_category_form_view_commission_line" model="ir.ui.view">
+        <field name="name">product.category.common.form.commission.line</field>
+        <field name="model">product.category</field>
+        <field name="inherit_id" ref="product.product_category_form_view" />
+        <field name="arch" type="xml">
+            <group name="first" position="after">
+                <group name="commission" string="Commission" col="2">
+                    <field name="commission_ids" groups="commission_oca.group_commission_manager">
+                        <list editable="bottom">
+                            <field name="agent_id"/>
+                            <field name="commission_id"/>
+                        </list>
+                    </field>
+                </group>
+            </group>
+        </field>
+    </record>
+</odoo>

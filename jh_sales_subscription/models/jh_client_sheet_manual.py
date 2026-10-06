@@ -23,51 +23,6 @@ class JhClientSheetManual(models.Model):
     _description = 'Histórico manual de ventas por cliente (diligenciamiento manual)'
     _order = 'jh_date desc, id desc'
 
-    @api.model
-    def _auto_init(self):
-        """Elimina la foreign key constraint si existe antes de cambiar el tipo de campo."""
-        # Ejecutar antes de que Odoo procese los campos
-        cr = self.env.cr
-        table_name = self._table
-        
-        # Verificar si la tabla existe
-        cr.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = %s
-            )
-        """, [table_name])
-        table_exists = cr.fetchone()[0]
-        
-        if table_exists:
-            # Buscar todas las constraints de foreign key en la columna jh_account_move
-            cr.execute("""
-                SELECT tc.constraint_name
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu 
-                    ON tc.constraint_name = kcu.constraint_name
-                WHERE tc.table_name = %s
-                    AND tc.constraint_type = 'FOREIGN KEY'
-                    AND kcu.column_name = 'jh_account_move'
-            """, [table_name])
-            
-            constraints = cr.fetchall()
-            
-            # Eliminar todas las constraints encontradas
-            for constraint_row in constraints:
-                constraint_name = constraint_row[0]
-                try:
-                    cr.execute(f"""
-                        ALTER TABLE {table_name} 
-                        DROP CONSTRAINT IF EXISTS {constraint_name} CASCADE
-                    """)
-                    _logger.info(f"Constraint {constraint_name} eliminada exitosamente")
-                except Exception as e:
-                    # Log pero no fallar si la constraint ya no existe
-                    _logger.warning(f"No se pudo eliminar constraint {constraint_name}: {e}")
-        
-        # Llamar al metdo padre para que Odoo procese los campos normalmente
-        return super()._auto_init()
 
     commercial_partner_id = fields.Many2one(
         'res.partner',
@@ -105,7 +60,7 @@ class JhClientSheetManual(models.Model):
             ('res_model', '=', self._name),
             ('res_id', '=', self.id),
         ], limit=1)
-        
+
         return {
             'name': 'Adjuntar PDF de Factura',
             'type': 'ir.actions.act_window',
@@ -130,16 +85,16 @@ class JhClientSheetManual(models.Model):
             ('res_model', '=', self._name),
             ('res_id', '=', self.id),
         ], limit=1)
-        
+
         if not attachment:
             raise UserError('No hay PDF adjunto para esta línea.')
-        
+
         return {
             'type': 'ir.actions.act_url',
             'url': f'/web/content/{attachment.id}?download=true',
             'target': 'new',
         }
-    
+
     def _compute_has_pdf_attachment(self):
         """Calcula si hay un PDF adjunto."""
         for rec in self:
@@ -148,18 +103,18 @@ class JhClientSheetManual(models.Model):
                 ('res_id', '=', rec.id),
             ], limit=1)
             rec.has_pdf_attachment = bool(attachment)
-    
+
     has_pdf_attachment = fields.Boolean(
         string='Tiene PDF',
         compute='_compute_has_pdf_attachment',
         store=False,
     )
-    
-    @api.model
+
+    @api.model_create_multi
     def create(self, vals_list):
         recs = super().create(vals_list)
         return recs
-    
+
     def write(self, vals):
         res = super().write(vals)
         return res

@@ -203,7 +203,8 @@ class jh_invoice_report_wizard(models.TransientModel):
         if self.show_price_margin:
             fields_dict['price_margin'] = 'Margen'
         if self.show_currency:
-            fields_dict['currency_id'] = 'Moneda'
+            fields_dict['currency_id'] = 'Moneda de factura'
+            fields_dict['company_currency_id'] = 'Moneda de compania'
         if self.show_invoice_user:
             fields_dict['invoice_user_id'] = 'Vendedor'
         if self.show_partner_shipping:
@@ -356,7 +357,7 @@ class jh_invoice_report_wizard(models.TransientModel):
                     ])
 
                     if pickings:
-                        all_move_lines = pickings.mapped('move_line_ids_without_package')
+                        all_move_lines = pickings.mapped('move_line_ids')
                         if invoice_line.product_id:
                             picking_move_lines = all_move_lines.filtered(
                                 lambda ml: ml.product_id.id == invoice_line.product_id.id
@@ -518,7 +519,7 @@ class jh_invoice_report_wizard(models.TransientModel):
             raise UserError(_('Debe seleccionar al menos una columna para exportar.'))
 
         # Buscar registros con search() normal, no search_read()
-        invoice_report = self.env['account.invoice.report'].sudo()
+        invoice_report = self.env['account.invoice.report']
         records = invoice_report.search(domain)
 
         if not records:

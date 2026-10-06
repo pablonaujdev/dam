@@ -28,11 +28,11 @@ class SaleOrderInheritSubscriptionProducts(models.Model):
             order.jh_subscription_product_ids = products
             order.jh_subscription_products_display = ', '.join(products.mapped('display_name')) if products else ''
 
-    @api.depends('order_line', 'order_line.product_id')
+    @api.depends('order_line.lot_id.name')
     def _compute_jh_serial_number(self):
         for order in self:
             serial_numbers = []
             if order.order_line:
                 serial_numbers = order.order_line.mapped('lot_id.name')
 
-            order.jh_serial_number = ', '.join(serial_numbers)
+            order.jh_serial_number = ', '.join(name for name in serial_numbers if name)

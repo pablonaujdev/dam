@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <record id="sale_order_line_view_form_inherit_renovation" model="ir.ui.view">
+        <field name="name">sale.order.line.form.inherit.renovation</field>
+        <field name="model">sale.order.line</field>
+        <field name="inherit_id" ref="sale.view_order_line_tree" />
+        <field name="priority">50</field>
+        <field name="arch" type="xml">
+            <field name="currency_id" position="after">
+                <field name="subscription_state" optional="show"/>
+                <field name="start_date" optional="show"/>
+                <field name="end_date" optional="show"/>
+                <field name="order_renove" optional="show"/>
+            </field>
+        </field>
+    </record>
+
+</odoo>

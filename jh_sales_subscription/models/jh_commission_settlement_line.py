@@ -4,13 +4,15 @@ from odoo import models, fields, api, _
 class ProductProductInherit(models.Model):
     """Heredar product.product para personalizar name_get en contexto de comisiones"""
     _inherit = 'product.product'
-    
-    def name_get(self):
-        """Personalizar name_get para mostrar solo el nombre del producto"""
-        # Si estamos en contexto de comisiones, mostrar solo el nombre
+
+    @api.depends('name', 'default_code')
+    @api.depends_context('commission_context')
+    def _compute_display_name(self):
         if self.env.context.get('commission_context'):
-            return [(record.id, record.name or '') for record in self]
-        return super().name_get()
+            for product in self:
+                product.display_name = product.name or ''
+        else:
+            super()._compute_display_name()
 
 
 class CommissionSettlementLineInherit(models.Model):
@@ -111,21 +113,21 @@ class CommissionSettlementLineInherit(models.Model):
                     if invoice_line.product_id:
                         domain.append(('product_id', '=', invoice_line.product_id.id))
                     stock_moves = self.env['stock.move'].search(domain)
-                    
+
                     if stock_moves:
                         # Buscar en las líneas de movimiento (stock.move.line)
                         move_lines = stock_moves.mapped('move_line_ids')
-                        
+
                         if move_lines:
                             # Buscar en lot_id de los movimientos
                             lot_names = move_lines.mapped('lot_id.name')
                             serial = ', '.join(filter(None, lot_names))
-                            
+
                             # Si no hay lot_id, buscar en lot_name
                             if not serial:
                                 lot_names = move_lines.mapped('lot_name')
                                 serial = ', '.join(filter(None, filter(lambda x: x, lot_names)))
-                            
+
                             if serial:
                                 record.jh_serial_number = serial
                                 continue
@@ -138,15 +140,15 @@ class CommissionSettlementLineInherit(models.Model):
                     if invoice_line.product_id:
                         domain.append(('product_id', '=', invoice_line.product_id.id))
                     move_lines_direct = self.env['stock.move.line'].search(domain)
-                    
+
                     if move_lines_direct:
                         lot_names = move_lines_direct.mapped('lot_id.name')
                         serial = ', '.join(filter(None, lot_names))
-                        
+
                         if not serial:
                             lot_names = move_lines_direct.mapped('lot_name')
                             serial = ', '.join(filter(None, filter(lambda x: x, lot_names)))
-                        
+
                         if serial:
                             record.jh_serial_number = serial
                             continue
@@ -160,32 +162,32 @@ class CommissionSettlementLineInherit(models.Model):
                     sale_orders = invoice_line.move_id.invoice_line_ids.mapped(
                         'sale_line_ids.order_id'
                     )
-                    
+
                     if sale_orders:
                         # Buscar pickings relacionados
                         pickings = self.env['stock.picking'].search([
                             ('sale_id', 'in', sale_orders.ids),
                             ('state', '=', 'done')
                         ])
-                        
+
                         if pickings:
                             # Buscar en las líneas de picking que coincidan con el producto
-                            all_move_lines = pickings.mapped('move_line_ids_without_package')
+                            all_move_lines = pickings.mapped('move_line_ids')
                             if invoice_line.product_id:
                                 picking_move_lines = all_move_lines.filtered(
                                     lambda ml: ml.product_id.id == invoice_line.product_id.id
                                 )
                             else:
                                 picking_move_lines = all_move_lines
-                            
+
                             if picking_move_lines:
                                 lot_names = picking_move_lines.mapped('lot_id.name')
                                 serial = ', '.join(filter(None, lot_names))
-                                
+
                                 if not serial:
                                     lot_names = picking_move_lines.mapped('lot_name')
                                     serial = ', '.join(filter(None, filter(lambda x: x, lot_names)))
-                                
+
                                 if serial:
                                     record.jh_serial_number = serial
                                     continue

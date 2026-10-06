@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+link_machine_wiz_access,link.machine.wiz,model_link_machine_wiz,base.group_user,1,1,1,1
+

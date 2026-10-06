@@ -3,7 +3,7 @@
     <record id="automation_sync_invoice_lot_to_sale_line" model="base.automation">
         <field name="name">Sincronizar lote factura a venta</field>
         <field name="model_id" ref="account.model_account_move_line"/>
-        <field name="trigger">on_write</field>
+        <field name="trigger">on_create_or_write</field>
         <field name="trigger_field_ids" eval="[(6, 0, [ref('jh_sales_subscription.field_account_move_line__jh_sale_lot_id')])]"/>
         <field name="filter_domain">[('move_id.move_type', 'in', ['out_invoice', 'out_refund', 'out_receipt'])]</field>
         <field name="active" eval="True"/>
