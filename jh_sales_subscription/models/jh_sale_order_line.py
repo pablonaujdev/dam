@@ -1,6 +1,6 @@
 from odoo import models, api, fields, _
-from odoo.exceptions import UserError
-from odoo.tools.float_utils import float_compare
+from odoo.exceptions import UserError, ValidationError
+from odoo.tools.float_utils import float_compare, float_is_zero
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -212,13 +212,33 @@ class SaleOrderInherit(models.Model):
             }
 
 
+    @api.constrains('start_date', 'end_date')
+    def _jh_check_subscription_dates(self):
+        for order in self:
+            if (
+                order.is_subscription and order.start_date and order.end_date
+                and order.end_date < order.start_date
+            ):
+                raise ValidationError(_(
+                    'La fecha de fin de la suscripción no puede ser anterior a su fecha de inicio.'
+                ))
+
     @api.model
-    def _cron_recalcular_invoice_status(self, only_pending=False):
+    def _cron_recalcular_invoice_status(self, only_pending=False, only_active_subscriptions=False):
         """Recompute native values in batches; never alter invoice quantities or periods."""
         domain = [('invoice_status', '=', 'to invoice')] if only_pending else []
+        if only_active_subscriptions:
+            domain += [
+                ('state', '=', 'sale'), ('is_subscription', '=', True),
+                ('subscription_state', 'in', ('3_progress', '4_paused')),
+                ('start_date', '!=', False),
+                '|', ('end_date', '=', False), ('end_date', '>', fields.Date.today()),
+            ]
         scheduled = bool(self.env.context.get('cron_id'))
         parameters = self.env['ir.config_parameter'].sudo()
-        key = 'jh_sales_subscription.invoice_status_cursor.%s' % (self.env.context.get('cron_id') or 'manual')
+        scope = '%s.%s' % (int(only_pending), int(only_active_subscriptions))
+        key = 'jh_sales_subscription.invoice_status_cursor.%s.%s' % (
+            self.env.context.get('cron_id') or 'manual', scope)
         last_id = int(parameters.get_param(key, '0')) if scheduled else 0
         result = {'orders_checked': 0, 'orders_changed': 0, 'lines_changed': 0}
         if scheduled:
@@ -247,6 +267,71 @@ class SaleOrderInherit(models.Model):
 
 class SaleOrderLineInherit(models.Model):
     _inherit = 'sale.order.line'
+
+    def _jh_has_posted_invoice_coverage(self, precision):
+        """Comprobar la cobertura propia usando el último período nativo de V19."""
+        self.ensure_one()
+        order = self.order_id
+        period_end = self.last_invoiced_date
+        if (
+            not period_end or not order.start_date or period_end < order.start_date
+            or not order.next_invoice_date or period_end >= order.next_invoice_date
+            or not float_is_zero(self.qty_to_invoice, precision_digits=precision)
+        ):
+            return False
+        invoice_lines = self.invoice_lines.filtered(
+            lambda line: line.move_id.state == 'posted'
+            and line.move_id.move_type in ('out_invoice', 'out_refund')
+            and line.deferred_start_date and line.deferred_start_date >= order.start_date
+            and line.deferred_start_date <= period_end
+            and line.deferred_end_date == period_end
+        )
+        if not invoice_lines.filtered(lambda line: line.move_id.move_type == 'out_invoice'):
+            return False
+        quantity = sum(
+            (1 if line.move_id.move_type == 'out_invoice' else -1)
+            * line.product_uom_id._compute_quantity(line.quantity, self.product_uom_id, round=False)
+            for line in invoice_lines
+        )
+        return float_compare(quantity, self.product_uom_qty, precision_digits=precision) >= 0
+
+    @api.depends(
+        'state', 'qty_to_invoice', 'qty_invoiced', 'product_uom_qty', 'product_uom_id',
+        'recurring_invoice', 'last_invoiced_date', 'price_subtotal', 'product_id.invoice_policy',
+        'invoice_lines.move_id.state', 'invoice_lines.move_id.move_type',
+        'invoice_lines.quantity', 'invoice_lines.product_uom_id',
+        'invoice_lines.deferred_start_date', 'invoice_lines.deferred_end_date',
+        'order_id.start_date', 'order_id.end_date', 'order_id.next_invoice_date',
+        'order_id.is_subscription', 'order_id.subscription_state', 'order_id.recurring_monthly',
+    )
+    def _compute_invoice_status(self):
+        super()._compute_invoice_status()
+        if self.env.context.get('skip_line_status_compute'):
+            return
+        today = fields.Date.today()
+        precision = self.env['decimal.precision'].precision_get('Product Unit')
+        for line in self:
+            order = line.order_id
+            if (
+                line.state != 'sale' or line.invoice_status != 'no'
+                or line.display_type or line.is_downpayment or not line.recurring_invoice
+                or not order.is_subscription or order.subscription_state != '3_progress'
+                or not order.start_date or order.start_date <= today
+                or not order.next_invoice_date or order.next_invoice_date < order.start_date
+                or (order.end_date and order.end_date <= order.start_date)
+            ):
+                continue
+            if line._jh_has_posted_invoice_coverage(precision):
+                line.invoice_status = 'invoiced'
+            elif (
+                not line._is_postpaid_line()
+                and order.next_invoice_date == order.start_date
+                and float_compare(line.qty_to_invoice, 0, precision_digits=precision) > 0
+                and order.currency_id.compare_amounts(order.recurring_monthly, 0) > 0
+                and not order.currency_id.is_zero(line.price_subtotal)
+            ):
+                # La selección manual nativa admite el primer período futuro prepago.
+                line.invoice_status = 'to invoice'
 
 
     jh_discount_manual = fields.Boolean(

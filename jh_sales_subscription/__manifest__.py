@@ -12,11 +12,16 @@
         El análisis conserva el detalle de líneas y los filtros Sin precio y Con precio.
         Histórico automático de consulta, sin regenerar datos al abrir contactos.
         Automatizaciones por lotes y avisos de vencimiento sin duplicados.
+        models/jh_sale_order_line.py adapta el estado de prefacturación al período
+        nativo last_invoiced_date y a las facturas contabilizadas propias de V19.
+        El primer período futuro pendiente muestra A facturar; las líneas cubiertas
+        muestran Facturado. Valida fin anterior al inicio y permite recalcular
+        únicamente los contratos activos, conservando los lotes nativos del cron.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '19.0.1.0.1',
+    'version': '19.0.1.0.2',
     'license': 'LGPL-3',
 
     # Módulos requeridos
