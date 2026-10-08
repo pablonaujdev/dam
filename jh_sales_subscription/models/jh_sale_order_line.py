@@ -1,5 +1,5 @@
 from odoo import models, api, fields, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools.float_utils import float_compare, float_is_zero
 from dateutil.relativedelta import relativedelta
 from odoo.tools.float_utils import float_compare, float_round
@@ -14,12 +14,21 @@ class SaleAdvancePaymentInvInherit(models.TransientModel):
     _inherit = 'sale.advance.payment.inv'
 
     def allowManualRecurringPrebillFallback(self, sale_orders, error_message):
-        has_subscription = any(sale_orders.mapped('is_subscription'))
+        subscriptions = sale_orders.filtered('is_subscription')
         end_date_guard_message = (
             'recurrentes cuya fecha de vencimiento ha pasado' in error_message
             or 'past their end date' in error_message
         )
-        return self.advance_payment_method == 'delivered' and has_subscription and end_date_guard_message
+        valid_periods = all(
+            order.next_invoice_date and order.start_date
+            and order.next_invoice_date >= order.start_date
+            and (not order.end_date or order.next_invoice_date < order.end_date)
+            for order in subscriptions
+        )
+        return (
+            self.advance_payment_method == 'delivered' and bool(subscriptions)
+            and end_date_guard_message and valid_periods
+        )
 
     def _create_invoices(self, sale_orders):
         # standard Odoo version "17"
@@ -202,6 +211,12 @@ class SaleOrderInherit(models.Model):
         extra_lines = self.env['sale.order.line']
         for order in self.filtered(lambda so: so.is_subscription and so.state in ('sale', 'done')):
             if order.subscription_state in ('5_renewed', '6_churn'):
+                continue
+            if (
+                not order.start_date or not order.next_invoice_date
+                or order.next_invoice_date < order.start_date
+                or (order.end_date and order.next_invoice_date >= order.end_date)
+            ):
                 continue
             extra_lines |= order.order_line.filtered(
                 lambda line: (
@@ -670,7 +685,10 @@ class SaleOrderInherit(models.Model):
                 float_compare(line.qty_invoiced, line.product_uom_qty, precision_digits=precision) >= 0
                 for line in lines
             )
-            if order.invoice_status == 'to invoice':
+            if order.invoice_status == 'to invoice' or (
+                order.is_subscription and order.start_date
+                and order.start_date > fields.Date.today()
+            ):
                 fully_invoiced = fully_invoiced and all(
                     float_is_zero(line.qty_to_invoice, precision_digits=precision)
                     and (
@@ -682,10 +700,28 @@ class SaleOrderInherit(models.Model):
             if fully_invoiced:
                 order.invoice_status = 'invoiced'
 
+    @api.constrains('start_date', 'end_date')
+    def _jh_check_subscription_dates(self):
+        for order in self:
+            if (
+                order.is_subscription and order.start_date and order.end_date
+                and order.end_date < order.start_date
+            ):
+                raise ValidationError(_(
+                    'La fecha de fin de la suscripción no puede ser anterior a su fecha de inicio.'
+                ))
+
     @api.model
-    def _cron_recalcular_invoice_status(self, only_pending=False):
+    def _cron_recalcular_invoice_status(self, only_pending=False, only_active_subscriptions=False):
         """Actualizar primero las líneas, sin alterar cantidades ni períodos."""
         domain = [('invoice_status', '=', 'to invoice')] if only_pending else []
+        if only_active_subscriptions:
+            domain += [
+                ('state', '=', 'sale'), ('is_subscription', '=', True),
+                ('subscription_state', 'in', ('3_progress', '4_paused')),
+                ('start_date', '!=', False),
+                '|', ('end_date', '=', False), ('end_date', '>', fields.Date.today()),
+            ]
         order_ids = self.search(domain, order='id').ids
         changed_orders = 0
         changed_lines = 0
@@ -766,6 +802,10 @@ class SaleOrderLineInherit(models.Model):
                 return False
             period_start = order.next_invoice_date - order.plan_id.billing_period
             period_end = order.next_invoice_date - relativedelta(days=1)
+            if order.start_date:
+                period_start = max(period_start, order.start_date)
+            if period_start > period_end:
+                return False
             # Mismo período que sale_subscription, usando solo documentos contabilizados.
             invoice_lines = invoice_lines.filtered(
                 lambda line: line.deferred_start_date and line.deferred_end_date
@@ -787,20 +827,45 @@ class SaleOrderLineInherit(models.Model):
         'invoice_lines.quantity', 'invoice_lines.product_uom_id',
         'invoice_lines.deferred_start_date', 'invoice_lines.deferred_end_date',
         'order_id.next_invoice_date', 'order_id.plan_id.billing_period_value',
-        'order_id.plan_id.billing_period_unit',
+        'order_id.plan_id.billing_period_unit', 'order_id.start_date', 'order_id.end_date',
+        'order_id.is_subscription', 'order_id.subscription_state',
+        'order_id.recurring_monthly', 'price_subtotal', 'product_id.invoice_policy',
     )
     def _compute_invoice_status(self):
         super()._compute_invoice_status()
         if self.env.context.get('skip_line_status_compute'):
             return
         precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
+        today = fields.Date.today()
         for line in self:
+            order = line.order_id
+            future_subscription = (
+                order.is_subscription and line.recurring_invoice
+                and order.start_date and order.start_date > today
+                and order.next_invoice_date and order.next_invoice_date >= order.start_date
+                and (not order.end_date or order.end_date > order.start_date)
+                and order.subscription_state == '3_progress'
+            )
             if (
-                line.state == 'sale' and line.invoice_status == 'to invoice'
+                line.state == 'sale'
+                and (line.invoice_status == 'to invoice' or (
+                    line.invoice_status == 'no' and future_subscription
+                ))
                 and not line.display_type and not line.is_downpayment
                 and line._jh_has_posted_invoice_coverage(precision)
             ):
                 line.invoice_status = 'invoiced'
+            elif (
+                line.state == 'sale' and line.invoice_status == 'no' and future_subscription
+                and not line.display_type and not line.is_downpayment
+                and line.product_id.invoice_policy == 'order'
+                and order.next_invoice_date == order.start_date
+                and float_compare(line.qty_to_invoice, 0, precision_digits=precision) > 0
+                and order.currency_id.compare_amounts(order.recurring_monthly, 0) > 0
+                and not order.currency_id.is_zero(line.price_subtotal)
+            ):
+                # Solo el primer período pendiente: no anticipar otro período ya cobrado.
+                line.invoice_status = 'to invoice'
 
     def _prepare_invoice_line(self, **optional_values):
         """

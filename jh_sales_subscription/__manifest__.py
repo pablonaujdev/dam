@@ -26,11 +26,17 @@
         Corrige estados pendientes con cantidad cero únicamente cuando las facturas
         contabilizadas cubren la cantidad neta y el período, descontando rectificativas.
         Permite limitar el recálculo a los pedidos que actualmente están a facturar.
+        Las suscripciones con inicio futuro muestran su primer período pendiente
+        como a facturar y reconocen los períodos contabilizados en sus líneas.
+        Valida que la fecha de fin no sea anterior al inicio y permite limitar
+        la actualización diaria de estados a las suscripciones activas.
+        La prefacturación manual respeta el fin del contrato y no fuerza
+        la generación de facturas para períodos posteriores a su vencimiento.
     """,
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '17.0.0.7.3',
+    'version': '17.0.0.7.4',
     'license': 'LGPL-3',
 
     # Módulos requeridos
