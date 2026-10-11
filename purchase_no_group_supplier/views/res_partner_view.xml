@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_res_partner_no_group_purchase_form_inherit" model="ir.ui.view">
+        <field name="name">view.res.partner.no.group.purchase.form.inherit</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="purchase.view_partner_property_form"/>
+        <field name="arch" type="xml">
+            <field name="property_purchase_currency_id" position="after">
+                <field name="no_group_purchase"/>
+            </field>
+        </field>
+    </record>
+
+</odoo>
