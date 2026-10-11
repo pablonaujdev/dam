@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<odoo>
+    <record id="view_res_config_settings_declaracion_responsable_form_inherit" model="ir.ui.view">
+        <field name="name">view.res.config.settings.delcaracion.responsable.form.inherit</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base_setup.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@id='about']/block[@name='about_setting_container']" position="after">
+                <block title="Declaración Responsable" name="avannubo_declaracion_responsable_block">
+                    <setting id="avannubo_declaracion_responsable_content" class="w-100">
+                        <div class="content-group" name="responsability_declaration">
+                            <p>AVANCEM AMB VOSTÈ, S.L. con CIF ESB63705305 y domicilio en C/Almogàvers, 80, 08018, Barcelona, Barcelona, España, declara: </p>
+                            <p>Que para el producto Odoo se han establecido las medidas técnicas de funcionamiento necesarias para cumplir con lo dispuesto en el Reglamento por el que se regulan las obligaciones de facturación, aprobado por el Real Decreto 1619/2012, de 30 de noviembre y en la Ley 58/2003, de 17 de noviembre, General Tributaria con el artículo 29.2j, introducido por la ley 11/2021, de 9 de julio, por el cual se estipula la obligación por parte de los productores, comercializadores y usuarios, de que los sistemas y programas informáticos o electrónicos que soporten los procesos contables, de facturación o de gestiones de quienes desarrollen actividades económicas, garanticen la integridad, conservación, accesibilidad, legibilidad, trazabilidad e inalterabilidad de los registros, sin interpolaciones, omisiones o alteraciones de las que no quede la debida anotación en los sistemas mismos. </p>
+                            <p>Teniendo en consideración que dicha ley se encuentra actualmente pendiente de desarrollo reglamentario, el producto Odoo podrá sufrir modificaciones posteriores de acuerdo con lo que se establezca en el futuro Reglamento, o en las especificaciones técnicas que soliciten, propongan o exijan los organismos competentes. </p>
+                            <h5>Sello de la empresa responsable:</h5>
+                            <img src="/avannubo_declaracion_responsable/static/src/imgs/firma.png" alt="Firma" style="max-width:250px; width:100%; height:auto;"/>
+                        </div>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

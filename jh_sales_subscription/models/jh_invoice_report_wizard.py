@@ -1,8 +1,9 @@
 from odoo import models, fields, api, _
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 import io
 import base64
 from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -11,6 +12,161 @@ _logger = logging.getLogger(__name__)
 class jh_invoice_report_wizard(models.TransientModel):
     _name = 'jh.invoice.report.wizard'
     _description = 'Wizard para Exportar Reporte de Facturas'
+
+    jh_preset_id = fields.Many2one('jh.invoice.report.preset', string='Configuración guardada', domain=lambda self: [('jh_user_id', '=', self.env.uid), ('jh_company_id', '=', self.env.company.id)], help='Carga los filtros y columnas de una plantilla privada.\nLos cambios del reporte no modifican la plantilla hasta pulsar Actualizar.')
+    jh_preset_name = fields.Char(string='Nombre de configuración', help='Define el nombre para guardar o actualizar la plantilla.\nUse otro nombre y Guardar como nueva para conservar la configuración original.')
+    jh_preset_default = fields.Boolean(string='Usar por defecto', help='Propone esta plantilla al abrir el reporte en la compañía activa.\nLa preferencia se conserva al guardar o actualizar la configuración.')
+    jh_preset_notice = fields.Char(string='Aviso de configuración', readonly=True, help='Explica por qué no se cargó automáticamente una plantilla.\nRevise las compañías activas o elimine la plantilla desactualizada desde Administrar.')
+    jh_period = fields.Selection([('manual', 'Fechas manuales'), ('current_month', 'Mes actual'), ('previous_month', 'Mes anterior'), ('current_year', 'Año actual')], string='Período', default='current_month', required=True, help='Calcula las fechas al cargar una configuración guardada.\nOpciones: manual (Fechas manuales), current_month (Mes actual), previous_month (Mes anterior), current_year (Año actual).')
+
+    @api.model
+    def _jh_setting_fields(self):
+        return [
+            'date_from', 'date_to', 'partner_ids', 'company_ids', 'product_ids',
+            'product_categ_ids', 'partner_type', 'state', 'move_type',
+            'agents_ids', 'export_format', 'jh_period',
+        ] + [name for name in self._fields if name.startswith('show_')]
+
+    @api.model
+    def _jh_period_dates(self, period):
+        today = fields.Date.context_today(self)
+        if period == 'current_month':
+            return {'date_from': today.replace(day=1), 'date_to': today}
+        if period == 'previous_month':
+            start = today.replace(day=1)
+            return {'date_from': start - relativedelta(months=1), 'date_to': start - relativedelta(days=1)}
+        if period == 'current_year':
+            return {'date_from': today.replace(month=1, day=1), 'date_to': today}
+        return {}
+
+    @api.model
+    def _jh_check_preset_access(self, preset):
+        preset.check_access('read')
+        if preset.jh_user_id != self.env.user or preset.jh_company_id != self.env.company:
+            raise UserError(_('La configuración debe pertenecer a su usuario y compañía activa.'))
+
+    @api.model
+    def _jh_preset_values(self, preset):
+        self._jh_check_preset_access(preset)
+        setting_fields = self._jh_setting_fields()
+        defaults = self.with_context(jh_skip_preset=True).default_get(setting_fields)
+        settings = preset.jh_settings or {}
+        if not isinstance(settings, dict):
+            raise UserError(_('La configuración guardada no es válida. Actualice sus filtros.'))
+        values = {}
+        for name in setting_fields:
+            field = self._fields[name]
+            value = settings.get(name, defaults.get(name, False))
+            if field.type == 'many2many':
+                if name in settings:
+                    if not isinstance(value, list) or any(type(record_id) is not int or record_id <= 0 for record_id in value):
+                        raise UserError(_('La configuración contiene filtros de registros no válidos.'))
+                    records = self.env[field.comodel_name].browse(value).exists()
+                    if len(records) != len(value):
+                        raise UserError(_('La configuración contiene registros eliminados. Actualice sus filtros.'))
+                    records.check_access('read')
+                    if name == 'company_ids' and not set(value).issubset(self.env.companies.ids):
+                        raise UserError(_('Active las compañías de la configuración antes de cargarla.'))
+                    value = [fields.Command.set(value)]
+                elif not value:
+                    value = [fields.Command.clear()]
+            elif field.type == 'selection' and value not in (False, None):
+                if value not in dict(field._description_selection(self.env)):
+                    raise UserError(_('La configuración contiene una opción que ya no está disponible.'))
+            elif field.type == 'date' and value:
+                try:
+                    value = fields.Date.to_date(value)
+                except (TypeError, ValueError):
+                    raise UserError(_('La configuración contiene una fecha no válida.'))
+            values[name] = value
+        values.update(self._jh_period_dates(values['jh_period']))
+        if not values['date_from'] or not values['date_to'] or fields.Date.to_date(values['date_from']) > fields.Date.to_date(values['date_to']):
+            raise UserError(_('La configuración contiene un período no válido.'))
+        values.update({
+            'jh_preset_id': preset.id,
+            'jh_preset_name': preset.jh_name,
+            'jh_preset_default': preset.jh_is_default,
+            'jh_preset_notice': False,
+        })
+        return values
+
+    @api.model
+    def default_get(self, fields_list):
+        values = super().default_get(fields_list)
+        if not self.env.context.get('jh_skip_preset'):
+            preset = self.env['jh.invoice.report.preset'].search([
+                ('jh_user_id', '=', self.env.uid),
+                ('jh_company_id', '=', self.env.company.id),
+                ('jh_is_default', '=', True),
+            ], limit=1)
+            if preset:
+                try:
+                    preset_values = self._jh_preset_values(preset)
+                except (AccessError, UserError) as error:
+                    preset_values = {'jh_preset_notice': _('No se cargó la configuración predeterminada: %s') % str(error)}
+                values.update({name: value for name, value in preset_values.items() if name in fields_list})
+        return values
+
+    @api.onchange('jh_preset_id')
+    def _onchange_jh_preset_id(self):
+        if self.jh_preset_id:
+            self.update(self._jh_preset_values(self.jh_preset_id))
+        else:
+            self.jh_preset_name = False
+            self.jh_preset_default = False
+
+    @api.onchange('jh_period')
+    def _onchange_jh_period(self):
+        self.update(self._jh_period_dates(self.jh_period))
+
+    def _jh_configuration_values(self):
+        self.ensure_one()
+        name = (self.jh_preset_name or '').strip()
+        if not name:
+            raise UserError(_('Indique un nombre para la configuración.'))
+        if not set(self.company_ids.ids).issubset(self.env.companies.ids):
+            raise UserError(_('Solo puede guardar compañías activas y permitidas.'))
+        settings = {}
+        for field_name in self._jh_setting_fields():
+            field = self._fields[field_name]
+            value = self[field_name]
+            if field.type == 'many2many':
+                value = value.ids
+            elif field.type == 'date':
+                if self.jh_period != 'manual':
+                    continue
+                value = fields.Date.to_string(value)
+            settings[field_name] = value
+        return {'jh_name': name, 'jh_is_default': self.jh_preset_default, 'jh_settings': settings}
+
+    def _jh_reopen(self):
+        return {'type': 'ir.actions.act_window', 'res_model': self._name, 'view_mode': 'form', 'res_id': self.id, 'target': 'new'}
+
+    def action_jh_save_preset(self):
+        self.ensure_one()
+        self.jh_preset_id = self.env['jh.invoice.report.preset'].create(self._jh_configuration_values())
+        return self._jh_reopen()
+
+    def action_jh_update_preset(self):
+        self.ensure_one()
+        if not self.jh_preset_id:
+            raise UserError(_('Seleccione una configuración para actualizar.'))
+        self._jh_check_preset_access(self.jh_preset_id)
+        self.jh_preset_id.write(self._jh_configuration_values())
+        return self._jh_reopen()
+
+    def action_jh_delete_preset(self):
+        self.ensure_one()
+        if self.jh_preset_id:
+            self._jh_check_preset_access(self.jh_preset_id)
+            self.jh_preset_id.unlink()
+        self.write({'jh_preset_id': False, 'jh_preset_name': False, 'jh_preset_default': False})
+        return self._jh_reopen()
+
+    def action_jh_manage_presets(self):
+        action = self.env['ir.actions.actions']._for_xml_id('jh_sales_subscription.jh_action_invoice_report_presets')
+        action['domain'] = [('jh_user_id', '=', self.env.uid), ('jh_company_id', '=', self.env.company.id)]
+        return action
 
     # Filtros de fecha
     date_from = fields.Date(

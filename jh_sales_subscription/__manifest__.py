@@ -4,12 +4,21 @@
     'summary': "Notificación de suscripciones próximas a vencer",
     'description': """
         Personalizaciones MIAC compatibles con Odoo 19.
+        Conserva la operación de suscripciones y los informes de facturas MIAC.
+
+        Estructura técnica y lógica funcional:
         Conserva precios y descuentos negociados, condiciones de renovación,
         lotes, contactos de entrega, comisiones OCA manuales y por categoría,
         liquidaciones, visitas, adjuntos e históricos manuales.
         Facturación, consolidación y validaciones de renovación nativas de Odoo 19.
         Informes de facturas con costes por compañía, IVA y exportación XLSX/CSV.
         El análisis conserva el detalle de líneas y los filtros Sin precio y Con precio.
+        models/jh_invoice_report_preset.py guarda plantillas privadas por usuario
+        y compañía; models/jh_invoice_report_wizard.py carga filtros, columnas y
+        formato, con una plantilla predeterminada y fechas manuales o relativas.
+        Las fechas relativas se recalculan al cargar y los cambios de filtros solo
+        se guardan mediante Guardar como nueva o Actualizar. La vista del asistente
+        permite administrar y eliminar plantillas sin guardar archivos generados.
         Histórico automático de consulta, sin regenerar datos al abrir contactos.
         Automatizaciones por lotes y avisos de vencimiento sin duplicados.
         models/jh_sale_order_line.py adapta el estado de prefacturación al período
@@ -21,7 +30,7 @@
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '19.0.1.0.2',
+    'version': '19.0.1.1.0',
     'license': 'LGPL-3',
 
     # Módulos requeridos
@@ -30,6 +39,7 @@
     # Archivos cargados siempre (orden: jh_client_sheet antes de actions_jh_visit)
     'data': [
         'security/ir.model.access.csv',
+        'security/jh_invoice_report_preset_security.xml',
         'security/jh_company_rules.xml',
         'data/cron_renovation_advice.xml',
         'data/cron_sale_order_invoice_status.xml',

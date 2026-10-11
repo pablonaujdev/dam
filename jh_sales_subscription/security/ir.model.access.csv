@@ -1,4 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+jh_access_invoice_report_preset,jh.invoice.report.preset,model_jh_invoice_report_preset,base.group_user,1,1,1,1
 access_jh_sales_subscription_advice,jh.sales.subscription.advice,model_jh_sales_subscription_advice,base.group_user,1,1,1,1
 access_jh_client_sheet,jh.client.sheet,model_jh_client_sheet,base.group_user,1,0,0,0
 access_jh_client_sheet_manual,jh.client.sheet.manual,model_jh_client_sheet_manual,base.group_user,1,1,1,1

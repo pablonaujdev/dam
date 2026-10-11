@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="jh_invoice_report_preset_private_rule" model="ir.rule">
+        <field name="name">Configuraciones de facturas: usuario y compañías permitidas</field>
+        <field name="model_id" ref="model_jh_invoice_report_preset"/>
+        <field name="domain_force">[('jh_user_id', '=', user.id), ('jh_company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>
