@@ -8,11 +8,32 @@
             <form string="Exportar Reporte de Facturas">
                 <field name="state_wizard" invisible="1"/>
 
+                <group string="Configuraciones guardadas" invisible="state_wizard == 'done'">
+                    <group>
+                        <field name="jh_preset_id" options="{'no_create': True, 'no_open': True}"/>
+                        <field name="jh_preset_name" placeholder="Ej.: Ventas mensuales por agente"/>
+                        <field name="jh_preset_default"/>
+                    </group>
+                    <group>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button name="action_jh_save_preset" type="object" string="Guardar como nueva" class="btn-secondary"/>
+                            <button name="action_jh_update_preset" type="object" string="Actualizar" class="btn-secondary" invisible="not jh_preset_id"/>
+                            <button name="action_jh_delete_preset" type="object" string="Eliminar" class="btn-link" invisible="not jh_preset_id" confirm="¿Eliminar esta configuración guardada?"/>
+                            <button name="action_jh_manage_presets" type="object" string="Administrar" class="btn-link"/>
+                        </div>
+                        <div class="text-muted">Guarde filtros, columnas y formato. Los ajustes puntuales solo se conservan al actualizar la configuración.</div>
+                    </group>
+                </group>
+                <div class="alert alert-warning" invisible="not jh_preset_notice or state_wizard == 'done'">
+                    <field name="jh_preset_notice" nolabel="1"/>
+                </div>
+
                 <group invisible="state_wizard == 'done'">
                     <!-- Filtros de Fecha -->
                     <group string="Período" col="2">
-                        <field name="date_from"/>
-                        <field name="date_to"/>
+                        <field name="jh_period"/>
+                        <field name="date_from" readonly="jh_period != 'manual'" force_save="1"/>
+                        <field name="date_to" readonly="jh_period != 'manual'" force_save="1"/>
                     </group>
 
                     <!-- Filtros Adicionales -->
@@ -101,6 +122,24 @@
     </record>
 
     <!-- Acción del Wizard -->
+    <record id="jh_view_invoice_report_preset_tree" model="ir.ui.view">
+        <field name="name">jh.invoice.report.preset.tree</field>
+        <field name="model">jh.invoice.report.preset</field>
+        <field name="arch" type="xml">
+            <tree string="Mis configuraciones de facturas" create="0" editable="bottom">
+                <field name="jh_name"/>
+                <field name="jh_is_default"/>
+                <field name="jh_company_id" readonly="1" groups="base.group_multi_company"/>
+            </tree>
+        </field>
+    </record>
+    <record id="jh_action_invoice_report_presets" model="ir.actions.act_window">
+        <field name="name">Mis configuraciones de facturas</field>
+        <field name="res_model">jh.invoice.report.preset</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="jh_view_invoice_report_preset_tree"/>
+        <field name="target">new</field>
+    </record>
     <record id="action_invoice_report_wizard" model="ir.actions.act_window">
         <field name="name">Exportar Reporte de Facturas</field>
         <field name="res_model">jh.invoice.report.wizard</field>
