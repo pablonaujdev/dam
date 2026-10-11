@@ -1,0 +1,98 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* miac_sale_purchase_notification
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0+e\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-11-29 12:40+0000\n"
+"PO-Revision-Date: 2024-11-29 12:40+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: \n"
+
+#. module: miac_sale_purchase_notification
+#: model:mail.template,subject:miac_sale_purchase_notification.email_template_sale_purchase_license
+msgid ""
+"{{ object.company_id.name }}: Purchase License For {{ object.name }}"
+msgstr ""
+"{{ object.company_id.name }}: Compra de Licencias para {{ object.name }}"
+
+#. module: miac_sale_purchase_notification
+#: model:mail.template,body_html:miac_sale_purchase_notification.email_template_sale_purchase_license
+msgid ""
+"<div style=\"margin: 0px; padding: 0px;\">\n"
+"                    <p style=\"margin: 0px; padding: 0px; font-size: 13px;\">\n"
+"                        Dear <t t-if=\"object.company_id.notify_purchase_license_id\">\n"
+"                        <span t-out=\"object.company_id.notify_purchase_license_id.name or ''\">\n"
+"                        </span></t>\n"
+"                        <br><br>\n"
+"                        From the order  <span style=\"font-weight:bold;\" t-out=\"object.name or ''\"></span>  has generated a purchase for licenses.\n"
+"                        <br><br>\n"
+"                        <t t-if=\"not is_html_empty(object.user_id.signature)\">\n"
+"                              <br><br>\n"
+"                              <t t-out=\"object.user_id.signature or ''\"></t>\n"
+"                        </t>\n"
+"                    </p>\n"
+"                </div>\n"
+"            "
+msgstr ""
+"<div style=\"margin: 0px; padding: 0px;\">\n"
+"                    <p style=\"margin: 0px; padding: 0px; font-size: 13px;\">\n"
+"                        Hola <t t-if=\"object.company_id.notify_purchase_license_id\">\n"
+"                        <span t-out=\"object.company_id.notify_purchase_license_id.name or ''\">\n"
+"                        </span></t>\n"
+"                        <br><br>\n"
+"                        Para el pedido de venta  <span style=\"font-weight:bold;\" t-out=\"object.name or ''\"></span>  se ha generado una compra de licencias.\n"
+"                        <br><br>\n"
+"                        <t t-if=\"not is_html_empty(object.user_id.signature)\">\n"
+"                              <br><br>\n"
+"                              <t t-out=\"object.user_id.signature or ''\"></t>\n"
+"                        </t>\n"
+"                    </p>\n"
+"                </div>\n"
+"            "
+
+#. module: miac_sale_purchase_notification
+#: model:ir.model,name:miac_sale_purchase_notification.model_res_company
+msgid "Companies"
+msgstr "Compañías"
+
+#. module: miac_sale_purchase_notification
+#: model:ir.model.fields,field_description:miac_sale_purchase_notification.field_res_company__notify_purchase_license_id
+msgid "License purchase notification recipient"
+msgstr "Destinatario de compras de licencias"
+
+#. module: miac_sale_purchase_notification
+#: model:mail.template,name:miac_sale_purchase_notification.email_template_sale_purchase_license
+msgid "Sale Purchase: Send notification buy license"
+msgstr ""
+
+#. module: miac_sale_purchase_notification
+#: model:ir.model,name:miac_sale_purchase_notification.model_sale_order
+msgid "Sales Order"
+msgstr "Pedidos de Venta"
+
+#. module: miac_sale_purchase_notification
+#: model:ir.model.fields,help:miac_sale_purchase_notification.field_res_company__notify_purchase_license_id
+msgid "Receives the license purchase notice generated when confirming a sale.\nA single valid email is required; missing configuration does not block confirmation."
+msgstr "Recibe el aviso de compra de licencias generado al confirmar una venta.\nRequiere un único correo válido; la falta de configuración no bloquea la confirmación."
+
+#. module: miac_sale_purchase_notification
+#: code:addons/miac_sale_purchase_notification/models/sale_order.py:0
+msgid "License purchases were created. No notice was queued because the company notification recipient is missing or has no single valid email."
+msgstr "Se han creado las compras de licencias. No se ha generado el aviso porque falta el destinatario de la compañía o no tiene un único correo válido."
+
+#. module: miac_sale_purchase_notification
+#: code:addons/miac_sale_purchase_notification/models/sale_order.py:0
+msgid "License purchases were created. No notice was queued because the license purchase email template is missing."
+msgstr "Se han creado las compras de licencias. No se ha generado el aviso porque falta la plantilla de correo de compra de licencias."
+
+#. module: miac_sale_purchase_notification
+#: code:addons/miac_sale_purchase_notification/models/sale_order.py:0
+msgid "License purchases were created, but their email notice could not be generated. The sale and purchases are preserved; please contact an administrator."
+msgstr "Se han creado las compras de licencias, pero no se ha podido generar el aviso. La venta y las compras se conservan; contacte con un administrador."

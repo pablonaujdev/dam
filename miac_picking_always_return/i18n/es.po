@@ -1,0 +1,18 @@
+# Translation of Odoo Server.
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0+e\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. module: miac_picking_always_return
+#: code:addons/miac_picking_always_return/wizards/stock_picking_return.py:0
+msgid "This transfer no longer allows a return. Only confirmed, waiting, ready or done transfers can be returned."
+msgstr "Este albarán ya no admite una devolución. Solo se pueden devolver albaranes confirmados, en espera, preparados o realizados."
+
+#. module: miac_picking_always_return
+#: model:ir.model.fields,help:miac_picking_always_return.field_stock_return_picking__product_return_moves
+msgid "Lists the original moves eligible for the return with quantities initially at zero.\nEnter quantities or use Return All; access follows the current user and company."
+msgstr "Muestra los movimientos originales que admiten devolución, con cantidades iniciales en cero.\nIntroduzca las cantidades o use Devolver todo; se respetan los permisos del usuario y su compañía."
