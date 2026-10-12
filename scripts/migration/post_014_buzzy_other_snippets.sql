@@ -1,0 +1,29 @@
+-- POST-014: individually reproduced incompatible snippet inheritances.
+-- Requires database backup; leaves parent architectures and pages intact.
+BEGIN;
+DO $$
+DECLARE matching_count integer;
+BEGIN
+SELECT count(*) INTO matching_count FROM ir_ui_view c,ir_ui_view p WHERE c.key = 'theme_buzzy.s_text_block' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_text_block' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='19ba9899948fba5a3e9edbd4df7d2d33' AND md5(p.arch_db->>'en_US')='f3d6c278977b9a4dd8dbd82dd9dc4f60';
+IF matching_count <> 1 THEN RAISE EXCEPTION 'Architecture guard failed: theme_buzzy.s_text_block'; END IF;
+UPDATE ir_ui_view c SET active=false FROM ir_ui_view p WHERE c.key = 'theme_buzzy.s_text_block' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_text_block' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='19ba9899948fba5a3e9edbd4df7d2d33' AND md5(p.arch_db->>'en_US')='f3d6c278977b9a4dd8dbd82dd9dc4f60' AND c.active;
+SELECT count(*) INTO matching_count FROM ir_ui_view c,ir_ui_view p WHERE c.key = 'theme_buzzy.s_product_catalog' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_product_catalog' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='a967773a92503f32a6f33b1ae1a2942c' AND md5(p.arch_db->>'en_US')='0e31d858923cc931608bab49dedf17b2';
+IF matching_count <> 1 THEN RAISE EXCEPTION 'Architecture guard failed: theme_buzzy.s_product_catalog'; END IF;
+UPDATE ir_ui_view c SET active=false FROM ir_ui_view p WHERE c.key = 'theme_buzzy.s_product_catalog' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_product_catalog' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='a967773a92503f32a6f33b1ae1a2942c' AND md5(p.arch_db->>'en_US')='0e31d858923cc931608bab49dedf17b2' AND c.active;
+SELECT count(*) INTO matching_count FROM ir_ui_view c,ir_ui_view p WHERE c.key = 'theme_buzzy.s_call_to_action' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_call_to_action' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='88626baa80aab83ea7432e69f50e1480' AND md5(p.arch_db->>'en_US')='dc30cf26d5846088d23d634cc6e9f1d9';
+IF matching_count <> 1 THEN RAISE EXCEPTION 'Architecture guard failed: theme_buzzy.s_call_to_action'; END IF;
+UPDATE ir_ui_view c SET active=false FROM ir_ui_view p WHERE c.key = 'theme_buzzy.s_call_to_action' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_call_to_action' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='88626baa80aab83ea7432e69f50e1480' AND md5(p.arch_db->>'en_US')='dc30cf26d5846088d23d634cc6e9f1d9' AND c.active;
+SELECT count(*) INTO matching_count FROM ir_ui_view c,ir_ui_view p WHERE c.key = 'theme_buzzy.s_process_steps' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_process_steps' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='334241bab11e197baf36b87f9786a5c9' AND md5(p.arch_db->>'en_US')='718e6454631c03b05b2c462f7262b00d';
+IF matching_count <> 1 THEN RAISE EXCEPTION 'Architecture guard failed: theme_buzzy.s_process_steps'; END IF;
+UPDATE ir_ui_view c SET active=false FROM ir_ui_view p WHERE c.key = 'theme_buzzy.s_process_steps' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_process_steps' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='334241bab11e197baf36b87f9786a5c9' AND md5(p.arch_db->>'en_US')='718e6454631c03b05b2c462f7262b00d' AND c.active;
+SELECT count(*) INTO matching_count FROM ir_ui_view c,ir_ui_view p WHERE c.key = 'theme_buzzy.s_quotes_carousel' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_quotes_carousel' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='1b925141ca2c82adf78262d5573573b6' AND md5(p.arch_db->>'en_US')='c61862a9e80523a94da0e6a6603ed1a4';
+IF matching_count <> 1 THEN RAISE EXCEPTION 'Architecture guard failed: theme_buzzy.s_quotes_carousel'; END IF;
+UPDATE ir_ui_view c SET active=false FROM ir_ui_view p WHERE c.key = 'theme_buzzy.s_quotes_carousel' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_quotes_carousel' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='1b925141ca2c82adf78262d5573573b6' AND md5(p.arch_db->>'en_US')='c61862a9e80523a94da0e6a6603ed1a4' AND c.active;
+SELECT count(*) INTO matching_count FROM ir_ui_view c,ir_ui_view p WHERE c.key = 'theme_buzzy.s_showcase' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_showcase' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='821c1119f6e3a218fbbea502eb199dd5' AND md5(p.arch_db->>'en_US')='81c883f42c69502a5c726c77f98b55d4';
+IF matching_count <> 1 THEN RAISE EXCEPTION 'Architecture guard failed: theme_buzzy.s_showcase'; END IF;
+UPDATE ir_ui_view c SET active=false FROM ir_ui_view p WHERE c.key = 'theme_buzzy.s_showcase' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_showcase' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='821c1119f6e3a218fbbea502eb199dd5' AND md5(p.arch_db->>'en_US')='81c883f42c69502a5c726c77f98b55d4' AND c.active;
+SELECT count(*) INTO matching_count FROM ir_ui_view c,ir_ui_view p WHERE c.key = 'theme_buzzy.s_three_columns' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_three_columns' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='82ce76f5714bc6679f2efb861cacb1e7' AND md5(p.arch_db->>'en_US')='8962c1c195b7abcba62878312b9c15b3';
+IF matching_count <> 1 THEN RAISE EXCEPTION 'Architecture guard failed: theme_buzzy.s_three_columns'; END IF;
+UPDATE ir_ui_view c SET active=false FROM ir_ui_view p WHERE c.key = 'theme_buzzy.s_three_columns' AND c.website_id = 1 AND p.id=c.inherit_id AND p.key='website.s_three_columns' AND p.website_id=c.website_id AND md5(c.arch_db->>'en_US')='82ce76f5714bc6679f2efb861cacb1e7' AND md5(p.arch_db->>'en_US')='8962c1c195b7abcba62878312b9c15b3' AND c.active;
+END $$;
+COMMIT;
