@@ -3,19 +3,22 @@
 
 import logging
 import random
+import time
 from datetime import datetime, timedelta
 
-from odoo import _, api, exceptions, fields, models
-from odoo.tools import config, html_escape, index_exists
+from odoo import api, exceptions, fields, models
+from odoo.tools import config, html_escape
+from odoo.tools.sql import create_index
 
 from odoo.addons.base_sparse_field.models.fields import Serialized
 
 from ..delay import Graph
-from ..exception import JobError
+from ..exception import JobError, RetryableJobError
 from ..fields import JobSerialized
 from ..job import (
     CANCELLED,
     DONE,
+    ENQUEUED,
     FAILED,
     PENDING,
     STARTED,
@@ -74,9 +77,6 @@ class QueueJob(models.Model):
 
     model_name = fields.Char(string="Model", readonly=True)
     method_name = fields.Char(readonly=True)
-    # record_ids field is only for backward compatibility (e.g. used in related
-    # actions), can be removed (replaced by "records") in 14.0
-    record_ids = JobSerialized(compute="_compute_record_ids", base_type=list)
     records = JobSerialized(
         string="Record(s)",
         readonly=True,
@@ -91,7 +91,7 @@ class QueueJob(models.Model):
     func_string = fields.Char(string="Task", readonly=True)
 
     state = fields.Selection(STATES, readonly=True, required=True, index=True)
-    priority = fields.Integer(group_operator=False)
+    priority = fields.Integer(aggregator=False)
     exc_name = fields.Char(string="Exception", readonly=True)
     exc_message = fields.Char(string="Exception Message", readonly=True, tracking=True)
     exc_info = fields.Text(string="Exception Info", readonly=True)
@@ -103,7 +103,8 @@ class QueueJob(models.Model):
     date_done = fields.Datetime(readonly=True)
     exec_time = fields.Float(
         string="Execution Time (avg)",
-        group_operator="avg",
+        readonly=True,
+        aggregator="avg",
         help="Time required to execute this job in seconds. Average when grouped.",
     )
     date_cancelled = fields.Datetime(readonly=True)
@@ -116,7 +117,7 @@ class QueueJob(models.Model):
         "max. retries.\n"
         "Retries are infinite when empty.",
     )
-    # the name of this field is very confusing
+    # FIXME the name of this field is very confusing
     channel_method_name = fields.Char(string="Complete Method Name", readonly=True)
     job_function_id = fields.Many2one(
         comodel_name="queue.job.function",
@@ -130,43 +131,41 @@ class QueueJob(models.Model):
     worker_pid = fields.Integer(readonly=True)
 
     def init(self):
-        index_1 = "queue_job_identity_key_state_partial_index"
-        index_2 = "queue_job_channel_date_done_date_created_index"
-        if not index_exists(self._cr, index_1):
-            # Used by Job.job_record_with_same_identity_key
-            self._cr.execute(
-                "CREATE INDEX queue_job_identity_key_state_partial_index "
-                "ON queue_job (identity_key) WHERE state in ('pending', "
-                "'enqueued', 'wait_dependencies') AND identity_key IS NOT NULL;"
-            )
-        if not index_exists(self._cr, index_2):
-            # Used by <queue.job>.autovacuum
-            self._cr.execute(
-                "CREATE INDEX queue_job_channel_date_done_date_created_index "
-                "ON queue_job (channel, date_done, date_created);"
-            )
-
-    @api.depends("records")
-    def _compute_record_ids(self):
-        for record in self:
-            record.record_ids = record.records.ids
+        cr = self.env.cr
+        # Used by Job.job_record_with_same_identity_key
+        create_index(
+            cr,
+            "queue_job_identity_key_state_partial_index",
+            "queue_job",
+            ["identity_key"],
+            where=(
+                "state in ('pending','enqueued','wait_dependencies') "
+                "AND identity_key IS NOT NULL"
+            ),
+            comment=("Queue Job: partial index for identity_key on active states"),
+        )
+        # Used by <queue.job>.autovacuum
+        create_index(
+            cr,
+            "queue_job_channel_date_done_date_created_index",
+            "queue_job",
+            ["channel", "date_done", "date_created"],
+            comment="Queue Job: index to accelerate autovacuum",
+        )
 
     @api.depends("dependencies")
     def _compute_dependency_graph(self):
-        jobs_groups = self.env["queue.job"].read_group(
-            [
-                (
-                    "graph_uuid",
-                    "in",
-                    [uuid for uuid in self.mapped("graph_uuid") if uuid],
+        graph_uuids = [uuid for uuid in self.mapped("graph_uuid") if uuid]
+        if graph_uuids:
+            ids_per_graph_uuid = dict(
+                self.env["queue.job"]._read_group(
+                    [("graph_uuid", "in", graph_uuids)],
+                    groupby=["graph_uuid"],
+                    aggregates=["id:array_agg"],
                 )
-            ],
-            ["graph_uuid", "ids:array_agg(id)"],
-            ["graph_uuid"],
-        )
-        ids_per_graph_uuid = {
-            group["graph_uuid"]: group["ids"] for group in jobs_groups
-        }
+            )
+        else:
+            ids_per_graph_uuid = {}
         for record in self:
             if not record.graph_uuid:
                 record.dependency_graph = {}
@@ -214,8 +213,9 @@ class QueueJob(models.Model):
         }
         return {
             "id": self.id,
-            "title": "<strong>{}</strong><br/>{}".format(
-                html_escape(self.display_name), html_escape(self.func_string)
+            "title": (
+                f"<strong>{html_escape(self.display_name)}</strong><br/>"
+                f"{html_escape(self.func_string)}"
             ),
             "color": colors.get(self.state, default)[0],
             "border": colors.get(self.state, default)[1],
@@ -223,31 +223,23 @@ class QueueJob(models.Model):
         }
 
     def _compute_graph_jobs_count(self):
-        jobs_groups = self.env["queue.job"].read_group(
-            [
-                (
-                    "graph_uuid",
-                    "in",
-                    [uuid for uuid in self.mapped("graph_uuid") if uuid],
+        graph_uuids = [uuid for uuid in self.mapped("graph_uuid") if uuid]
+        if graph_uuids:
+            count_per_graph_uuid = dict(
+                self.env["queue.job"]._read_group(
+                    [("graph_uuid", "in", graph_uuids)],
+                    groupby=["graph_uuid"],
+                    aggregates=["__count"],
                 )
-            ],
-            ["graph_uuid"],
-            ["graph_uuid"],
-        )
-        count_per_graph_uuid = {
-            group["graph_uuid"]: group["graph_uuid_count"] for group in jobs_groups
-        }
+            )
+        else:
+            count_per_graph_uuid = {}
         for record in self:
             record.graph_jobs_count = count_per_graph_uuid.get(record.graph_uuid) or 0
 
     @api.model_create_multi
+    @api.private
     def create(self, vals_list):
-        if self.env.context.get("_job_edit_sentinel") is not self.EDIT_SENTINEL:
-            # Prevent to create a queue.job record "raw" from RPC.
-            # ``with_delay()`` must be used.
-            raise exceptions.AccessError(
-                _("Queue jobs must be created by calling 'with_delay()'.")
-            )
         return super(
             QueueJob,
             self.with_context(mail_create_nolog=True, mail_create_nosubscribe=True),
@@ -259,11 +251,12 @@ class QueueJob(models.Model):
                 fieldname for fieldname in vals if fieldname in self._protected_fields
             ]
             if write_on_protected_fields:
-                raise exceptions.AccessError(
-                    _("Not allowed to change field(s): {}").format(
-                        write_on_protected_fields
-                    )
+                # use env translation and lazy formatting (args to _)
+                msg = self.env._(
+                    "Not allowed to change field(s): %s",
+                    ", ".join(write_on_protected_fields),
                 )
+                raise exceptions.AccessError(msg)
 
         different_user_jobs = self.browse()
         if vals.get("user_id"):
@@ -291,7 +284,8 @@ class QueueJob(models.Model):
         job = Job.load(self.env, self.uuid)
         action = job.related_action()
         if action is None:
-            raise exceptions.UserError(_("No action available for this job"))
+            msg = self.env._("No action available for this job")
+            raise exceptions.UserError(msg)
         return action
 
     def open_graph_jobs(self):
@@ -304,7 +298,7 @@ class QueueJob(models.Model):
         )
         action.update(
             {
-                "name": _("Jobs for graph %s") % (self.graph_uuid),
+                "name": self.env._("Jobs for graph %s", self.graph_uuid),
                 "context": {},
                 "domain": [("id", "in", jobs.ids)],
             }
@@ -333,21 +327,30 @@ class QueueJob(models.Model):
                 record.env["queue.job"].flush_model()
                 job_.cancel_dependent_jobs()
             else:
-                raise ValueError("State not supported: %s" % state)
+                msg = f"State not supported: {state}"
+                raise ValueError(msg)
 
     def button_done(self):
-        result = _("Manually set to done by %s") % self.env.user.name
-        self._change_job_state(DONE, result=result)
+        # If job was set to STARTED or CANCELLED, do not set it to DONE
+        states_from = (WAIT_DEPENDENCIES, PENDING, ENQUEUED, FAILED)
+        result = self.env._("Manually set to done by %s", self.env.user.name)
+        records = self.filtered(lambda job_: job_.state in states_from)
+        records._change_job_state(DONE, result=result)
         return True
 
     def button_cancelled(self):
-        result = _("Cancelled by %s") % self.env.user.name
-        self._change_job_state(CANCELLED, result=result)
+        # If job was set to DONE do not cancel it
+        states_from = (WAIT_DEPENDENCIES, PENDING, ENQUEUED, FAILED)
+        result = self.env._("Cancelled by %s", self.env.user.name)
+        records = self.filtered(lambda job_: job_.state in states_from)
+        records._change_job_state(CANCELLED, result=result)
         return True
 
     def requeue(self):
-        jobs_to_requeue = self.filtered(lambda job_: job_.state != WAIT_DEPENDENCIES)
-        jobs_to_requeue._change_job_state(PENDING)
+        # If job is already in queue or started, do not requeue it
+        states_from = (FAILED, DONE, CANCELLED)
+        records = self.filtered(lambda job_: job_.state in states_from)
+        records._change_job_state(PENDING)
         return True
 
     def _message_post_on_failure(self):
@@ -371,7 +374,7 @@ class QueueJob(models.Model):
         if not group:
             return None
         companies = self.mapped("company_id")
-        domain = [("groups_id", "=", group.id)]
+        domain = [("group_ids", "=", group.id)]
         if companies:
             domain.append(("company_id", "in", companies.ids))
         return domain
@@ -393,7 +396,7 @@ class QueueJob(models.Model):
         If nothing is returned, no message will be posted.
         """
         self.ensure_one()
-        return _(
+        return self.env._(
             "Something bad happened during the execution of the job. "
             "More details in the 'Exception Information' section."
         )
@@ -411,8 +414,9 @@ class QueueJob(models.Model):
 
         Called from a cron.
         """
-        for channel in self.env["queue.job.channel"].search([]):
+        for channel in self.env["queue.job.channel"].search([]):  # pylint: disable=no-search-all
             deadline = datetime.now() - timedelta(days=int(channel.removal_interval))
+            # Delete in chunks using a stable order (matches composite index)
             while True:
                 jobs = self.search(
                     [
@@ -448,7 +452,7 @@ class QueueJob(models.Model):
         if not records:
             return None
         action = {
-            "name": _("Related Record"),
+            "name": self.env._("Related Record"),
             "type": "ir.actions.act_window",
             "view_mode": "form",
             "res_model": records._name,
@@ -458,14 +462,34 @@ class QueueJob(models.Model):
         else:
             action.update(
                 {
-                    "name": _("Related Records"),
-                    "view_mode": "tree,form",
+                    "name": self.env._("Related Records"),
+                    "view_mode": "list,form",
                     "domain": [("id", "in", records.ids)],
                 }
             )
         return action
 
-    def _test_job(self, failure_rate=0):
+    def _test_job(
+        self,
+        failure_rate=0,
+        job_duration=0,
+        commit_within_job=False,
+        failure_retry_seconds=0,
+    ):
         _logger.info("Running test job.")
         if random.random() <= failure_rate:
-            raise JobError("Job failed")
+            if failure_retry_seconds:
+                raise RetryableJobError(
+                    f"Retryable job failed, will be retried in "
+                    f"{failure_retry_seconds} seconds",
+                    seconds=failure_retry_seconds,
+                )
+            else:
+                raise JobError("Job failed")
+        if job_duration:
+            time.sleep(job_duration)
+        if commit_within_job:
+            self.env.cr.commit()  # pylint: disable=invalid-commit
+
+    def _test_on_fail(self, **kw):
+        pass

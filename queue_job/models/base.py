@@ -5,8 +5,7 @@ import functools
 
 from odoo import api, models
 
-from ..delay import Delayable
-from ..job import DelayableRecordset
+from ..delay import Delayable, DelayableRecordset
 from ..utils import must_run_without_delay
 
 
@@ -169,9 +168,6 @@ class Base(models.AbstractModel):
         method named after the name of the method suffixed by ``_job_options``
         which takes the same parameters as the initial method.
 
-        It is still possible to force synchronous execution of the method by
-        setting a key ``_job_force_sync`` to True in the environment context.
-
         Example patching the "foo" method to be automatically delayed as job
         (the job options method is optional):
 
@@ -197,9 +193,17 @@ class Base(models.AbstractModel):
                 }
 
             def _register_hook(self):
-                self._patch_method(
+                # patch the method at registry time
+                patched = self._patch_job_auto_delay(
+                    "foo", context_key="auto_delay_foo"
+                )
+                setattr(
+                    type(self),
                     "foo",
-                    self._patch_job_auto_delay("foo", context_key="auto_delay_foo")
+                    functools.update_wrapper(
+                        patched,
+                        getattr(type(self), "foo"),
+                    ),
                 )
                 return super()._register_hook()
 
@@ -228,8 +232,9 @@ class Base(models.AbstractModel):
                 delayed = self.with_delay(**job_options)
                 return getattr(delayed, method_name)(*args, **kwargs)
 
-        origin = getattr(self, method_name)
-        return functools.update_wrapper(auto_delay_wrapper, origin)
+        origin_func = getattr(type(self), method_name)
+        auto_delay_wrapper.origin = origin_func
+        return functools.update_wrapper(auto_delay_wrapper, origin_func)
 
     @api.model
     def _job_store_values(self, job):
@@ -263,12 +268,3 @@ class Base(models.AbstractModel):
             for key, value in self.env.context.items()
             if key in self._job_prepare_context_before_enqueue_keys()
         }
-
-    @classmethod
-    def _patch_method(cls, name, method):
-        origin = getattr(cls, name)
-        method.origin = origin
-        # propagate decorators from origin to method, and apply api decorator
-        wrapped = api.propagate(origin, method)
-        wrapped.origin = origin
-        setattr(cls, name, wrapped)

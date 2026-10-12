@@ -1,3 +1,4 @@
+from . import test_run_job_controller_http
 from . import test_run_rob_controller
 from . import test_runner_channels
 from . import test_runner_runner
@@ -8,4 +9,3 @@ from . import test_model_job_channel
 from . import test_model_job_function
 from . import test_queue_job_protected_write
 from . import test_wizards
-from . import test_requeue_dead_job

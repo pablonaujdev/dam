@@ -6,12 +6,14 @@ from datetime import date, datetime
 
 import dateutil
 import lxml
+from psycopg2.extras import Json as PsycopgJson
 
 from odoo import fields, models
 from odoo.tools.func import lazy
+from odoo.tools.misc import SENTINEL
 
 
-class JobSerialized(fields.Field):
+class JobSerialized(fields.Json):
     """Provide the storage for job fields stored as json
 
     A base_type must be set, it must be dict, list or tuple.
@@ -23,7 +25,7 @@ class JobSerialized(fields.Field):
     """
 
     type = "job_serialized"
-    column_type = ("text", "text")
+    _column_type = ("jsonb", "jsonb")
 
     _base_type = None
 
@@ -37,13 +39,14 @@ class JobSerialized(fields.Field):
         ),
     }
 
-    def __init__(self, string=fields.Default, base_type=fields.Default, **kwargs):
+    def __init__(self, string=SENTINEL, base_type=SENTINEL, **kwargs):
         super().__init__(string=string, _base_type=base_type, **kwargs)
 
-    def _setup_attrs(self, model, name):  # pylint: disable=missing-return
-        super()._setup_attrs(model, name)
+    def _setup_attrs__(self, model, name):  # pylint: disable=missing-return
+        super()._setup_attrs__(model, name)
         if self._base_type not in self._default_json_mapping:
-            raise ValueError("%s is not a supported base type" % (self._base_type))
+            msg = f"{self._base_type} is not a supported base type"
+            raise ValueError(msg)
 
     def _base_type_default_json(self, env):
         default_json = self._default_json_mapping.get(self._base_type)
@@ -52,7 +55,8 @@ class JobSerialized(fields.Field):
         return default_json
 
     def convert_to_column(self, value, record, values=None, validate=True):
-        return self.convert_to_cache(value, record, validate=validate)
+        value = self.convert_to_cache(value, record, validate=validate)
+        return PsycopgJson(value)
 
     def convert_to_cache(self, value, record, validate=True):
         # cache format: json.dumps(value) or None
@@ -63,7 +67,15 @@ class JobSerialized(fields.Field):
 
     def convert_to_record(self, value, record):
         default = self._base_type_default_json(record.env)
-        return json.loads(value or default, cls=JobDecoder, env=record.env)
+        value = value or default
+        if not isinstance(value, (str | bytes | bytearray)):
+            value = json.dumps(value, cls=JobEncoder)
+        return json.loads(value, cls=JobDecoder, env=record.env)
+
+    def convert_to_export(self, value, record):
+        if not value:
+            return ""
+        return json.dumps(value, cls=JobEncoder)
 
 
 class JobEncoder(json.JSONEncoder):

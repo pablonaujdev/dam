@@ -8,12 +8,34 @@ import os
 import sys
 import uuid
 import weakref
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from random import randint
 
 import odoo
+from odoo.models import BaseModel
 
 from .exception import FailedJobError, NoSuchJobError, RetryableJobError
+
+
+def _rebind_to_cr(value, cr):
+    """Rebind any BaseModel inside ``value`` to the cursor ``cr``.
+
+    Recurses into lists, tuples and dicts. Preserves uid/su/context of each
+    inner env - only the cursor is swapped. Recordsets already bound to
+    ``cr`` and non-recordset values pass through untouched. Containers are
+    rebuilt, so in-place changes to the result are lost.
+    """
+    if isinstance(value, BaseModel):
+        if value.env.cr is cr:
+            return value
+        return value.with_env(value.env(cr=cr))
+    if isinstance(value, (list, tuple)):
+        return type(value)(_rebind_to_cr(v, cr) for v in value)
+    if isinstance(value, dict):
+        return {k: _rebind_to_cr(v, cr) for k, v in value.items()}
+    return value
+
 
 WAIT_DEPENDENCIES = "wait_dependencies"
 PENDING = "pending"
@@ -38,19 +60,6 @@ DEFAULT_MAX_RETRIES = 5
 RETRY_INTERVAL = 10 * 60  # seconds
 
 _logger = logging.getLogger(__name__)
-
-
-# remove in 15.0 or 16.0, used to keep compatibility as the
-# class has been moved in 'delay'.
-def DelayableRecordset(*args, **kwargs):
-    # prevent circular import
-    from .delay import DelayableRecordset as dr
-
-    _logger.debug(
-        "DelayableRecordset moved from the queue_job.job"
-        " to the queue_job.delay python module"
-    )
-    return dr(*args, **kwargs)
 
 
 def identity_exact(job_):
@@ -222,9 +231,8 @@ class Job:
         """
         stored = cls.db_records_from_uuids(env, [job_uuid])
         if not stored:
-            raise NoSuchJobError(
-                "Job %s does no longer exist in the storage." % job_uuid
-            )
+            msg = f"Job {job_uuid} does no longer exist in the storage."
+            raise NoSuchJobError(msg)
         return cls._load_from_db_record(stored)
 
     @classmethod
@@ -236,7 +244,7 @@ class Job:
         recordset = cls.db_records_from_uuids(env, job_uuids)
         return {cls._load_from_db_record(record) for record in recordset}
 
-    def add_lock_record(self):
+    def add_lock_record(self) -> None:
         """
         Create row in db to be locked while the job is being performed.
         """
@@ -256,13 +264,11 @@ class Job:
             [self.uuid],
         )
 
-    def lock(self):
-        """
-        Lock row of job that is being performed
+    def lock(self) -> bool:
+        """Lock row of job that is being performed.
 
-        If a job cannot be locked,
-        it means that the job wasn't started,
-        a RetryableJobError is thrown.
+        Return False if a job cannot be locked: it means that the job is not in
+        STARTED state or is already locked by another worker.
         """
         self.env.cr.execute(
             """
@@ -278,18 +284,15 @@ class Job:
                         queue_job
                     WHERE
                         uuid = %s
-                        AND state='started'
+                        AND state = %s
                 )
-            FOR UPDATE;
+            FOR NO KEY UPDATE SKIP LOCKED;
         """,
-            [self.uuid],
+            [self.uuid, STARTED],
         )
 
         # 1 job should be locked
-        if 1 != len(self.env.cr.fetchall()):
-            raise RetryableJobError(
-                f"Trying to lock job that wasn't started, uuid: {self.uuid}"
-            )
+        return bool(self.env.cr.fetchall())
 
     @classmethod
     def _load_from_db_record(cls, job_db_record):
@@ -366,12 +369,6 @@ class Job:
         return existing
 
     @staticmethod
-    def db_record_from_uuid(env, job_uuid):
-        # remove in 15.0 or 16.0
-        _logger.debug("deprecated, use 'db_records_from_uuids")
-        return Job.db_records_from_uuids(env, [job_uuid])
-
-    @staticmethod
     def db_records_from_uuids(env, job_uuids):
         model = env["queue.job"].sudo()
         record = model.search([("uuid", "in", tuple(job_uuids))])
@@ -418,27 +415,28 @@ class Job:
             args = ()
         if isinstance(args, list):
             args = tuple(args)
-        assert isinstance(args, tuple), "%s: args are not a tuple" % args
+        assert isinstance(args, tuple), f"{args}: args are not a tuple"
         if kwargs is None:
             kwargs = {}
 
-        assert isinstance(kwargs, dict), "%s: kwargs are not a dict" % kwargs
+        assert isinstance(kwargs, dict), f"{kwargs}: kwargs are not a dict"
 
         if not _is_model_method(func):
             raise TypeError("Job accepts only methods of Models")
 
         recordset = func.__self__
-        env = recordset.env
         self.method_name = func.__name__
         self.recordset = recordset
-
-        self.env = env
-        self.job_model = self.env["queue.job"]
-        self.job_model_name = "queue.job"
 
         self.job_config = (
             self.env["queue.job.function"].sudo().job_config(self.job_function_name)
         )
+        on_fail_method_name = self.job_config.on_fail_method_name
+        if on_fail_method_name and not _is_model_method(
+            getattr(self.recordset, on_fail_method_name, None)
+        ):
+            raise TypeError("Job accepts only methods of Models")
+        self.on_fail_method_name = on_fail_method_name
 
         self.state = PENDING
 
@@ -485,10 +483,10 @@ class Job:
         self.exc_message = None
         self.exc_info = None
 
-        if "company_id" in env.context:
-            company_id = env.context["company_id"]
+        if "company_id" in self.env.context:
+            company_id = self.env.context["company_id"]
         else:
-            company_id = env.company.id
+            company_id = self.env.company.id
         self.company_id = company_id
         self._eta = None
         self.eta = eta
@@ -513,7 +511,12 @@ class Job:
         """
         self.retry += 1
         try:
-            self.result = self.func(*tuple(self.args), **self.kwargs)
+            if self.job_config.allow_commit:
+                env_context_manager = self.in_temporary_env()
+            else:
+                env_context_manager = nullcontext()
+            with env_context_manager:
+                self.result = self.func(*tuple(self.args), **self.kwargs)
         except RetryableJobError as err:
             if err.ignore_retry:
                 self.retry -= 1
@@ -526,12 +529,22 @@ class Job:
                 # traceback and message:
                 # http://blog.ianbicking.org/2007/09/12/re-raising-exceptions/
                 new_exc = FailedJobError(
-                    "Max. retries (%d) reached: %s" % (self.max_retries, value or type_)
+                    f"Max. retries ({self.max_retries}) reached: {value or type_}"
                 )
                 raise new_exc from err
             raise
 
         return self.result
+
+    @contextmanager
+    def in_temporary_env(self):
+        with self.env.registry.cursor() as new_cr:
+            env = self.env
+            try:
+                self._env = env(cr=new_cr)
+                yield
+            finally:
+                self._env = env
 
     def _get_common_dependent_jobs_query(self):
         return """
@@ -562,6 +575,9 @@ class Job:
             AND %s = ALL(jobs.parent_states)
             AND state = %s;
         """
+
+    def should_check_dependents(self):
+        return any(self.__reverse_depends_on_uuids)
 
     def enqueue_waiting(self):
         sql = self._get_common_dependent_jobs_query()
@@ -692,6 +708,32 @@ class Job:
         return self.db_records_from_uuids(self.env, [self.uuid])
 
     @property
+    def env(self):
+        return self.recordset.env
+
+    @env.setter
+    def _env(self, env):
+        self.recordset = self.recordset.with_env(env)
+
+    @property
+    def args(self):
+        """Positional arguments, rebound to the job's current cursor."""
+        return _rebind_to_cr(self._args, self.env.cr)
+
+    @args.setter
+    def args(self, value):
+        self._args = value
+
+    @property
+    def kwargs(self):
+        """Keyword arguments, rebound to the job's current cursor."""
+        return _rebind_to_cr(self._kwargs, self.env.cr)
+
+    @kwargs.setter
+    def kwargs(self, value):
+        self._kwargs = value
+
+    @property
     def func(self):
         recordset = self.recordset.with_context(job_uuid=self.uuid)
         return getattr(recordset, self.method_name)
@@ -755,7 +797,7 @@ class Job:
 
     @property
     def user_id(self):
-        return self.recordset.env.uid
+        return self.env.uid
 
     @property
     def eta(self):
@@ -833,8 +875,15 @@ class Job:
             if v is not None:
                 setattr(self, k, v)
 
+    def on_fail(self, fail_vals):
+        if not self.on_fail_method_name:
+            return
+        on_fail_func = getattr(self.recordset, self.on_fail_method_name, None)
+        if on_fail_func:
+            on_fail_func(**fail_vals)
+
     def __repr__(self):
-        return "<Job %s, priority:%d>" % (self.uuid, self.priority)
+        return f"<Job {self.uuid}, priority:{self.priority}>"
 
     def _get_retry_seconds(self, seconds=None):
         retry_pattern = self.job_config.retry_pattern
@@ -849,7 +898,7 @@ class Job:
                     break
         elif not seconds:
             seconds = RETRY_INTERVAL
-        if isinstance(seconds, (list | tuple)):
+        if isinstance(seconds, list | tuple):
             seconds = randint(seconds[0], seconds[1])
         return seconds
 
@@ -877,8 +926,7 @@ class Job:
             funcname = record._default_related_action
         if not isinstance(funcname, str):
             raise ValueError(
-                "related_action must be the name of the "
-                "method on queue.job as string"
+                "related_action must be the name of the method on queue.job as string"
             )
         action = getattr(record, funcname)
         action_kwargs = self.job_config.related_action_kwargs

@@ -5,11 +5,14 @@
 import logging
 from threading import Thread
 import time
+from configparser import ConfigParser
 
 from odoo.service import server
 from odoo.tools import config
 
 try:
+    # Preferred source when available: structured [queue_job] section provided
+    # by OCA's server_environment addon.
     from odoo.addons.server_environment import serv_config
 
     if serv_config.has_section("queue_job"):
@@ -17,10 +20,17 @@ try:
     else:
         queue_job_config = {}
 except ImportError:
-    queue_job_config = config.misc.get("queue_job", {})
+    # No server_environment: try to read a [queue_job] section from odoo.conf
+    queue_job_config = {}
+    cfg_path = config.get("config")
+    if cfg_path:
+        cp = ConfigParser(interpolation=None)
+        cp.read(cfg_path)
+        if cp.has_section("queue_job"):
+            queue_job_config = dict(cp["queue_job"])
 
 
-from .runner import QueueJobRunner, _channels
+from .runner import QueueJobRunner, _channels  # noqa: E402
 
 _logger = logging.getLogger(__name__)
 
@@ -141,7 +151,8 @@ def prefork_worker_pop(server, pid):
 
 def threaded_start(server, *args, **kwargs):
     res = orig_threaded_start(server, *args, **kwargs)
-    _start_runner_thread("threaded server")
+    if not kwargs.get("stop"):
+        _start_runner_thread("threaded server")
     return res
 
 
