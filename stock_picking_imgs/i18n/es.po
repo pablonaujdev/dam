@@ -1,0 +1,31 @@
+# Translation of stock_picking_imgs for Odoo 19.
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. module: stock_picking_imgs
+#: model:ir.model.fields,field_description:stock_picking_imgs.field_sale_order_line__image
+#: model:ir.model.fields,field_description:stock_picking_imgs.field_stock_move__image
+#: model:ir.model.fields,field_description:stock_picking_imgs.field_stock_move_line__image
+#: model_terms:ir.ui.view,arch_db:stock_picking_imgs.image_sale_order_report
+#: model_terms:ir.ui.view,arch_db:stock_picking_imgs.report_delivery_image_document
+msgid "Image"
+msgstr "Imagen"
+
+#. module: stock_picking_imgs
+#: model:ir.model.fields,help:stock_picking_imgs.field_sale_order_line__image
+#: model:ir.model.fields,help:stock_picking_imgs.field_stock_move__image
+#: model:ir.model.fields,help:stock_picking_imgs.field_stock_move_line__image
+msgid "Shows the current product image as a thumbnail in document lines and reports.\nChanges to the product image are reflected here; no historical copy is stored."
+msgstr "Muestra la imagen actual del producto en las líneas e informes del documento.\nLos cambios en la fotografía se reflejan aquí; no se guarda una copia histórica."
+
+#. module: stock_picking_imgs
+#: model_terms:ir.ui.view,arch_db:stock_picking_imgs.image_sale_order_report
+#: model_terms:ir.ui.view,arch_db:stock_picking_imgs.report_delivery_image_document
+msgid "Product image"
+msgstr "Imagen del producto"

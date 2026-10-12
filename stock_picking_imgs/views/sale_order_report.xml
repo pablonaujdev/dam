@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <template id="image_sale_order_report" inherit_id="sale.report_saleorder_document" priority="180">
+            <xpath expr="//th[@name='th_description']" position="before">
+                <th name="th_image" class="text-center">Image</th>
+            </xpath>
+            <xpath expr="//td[@name='td_product_name']" position="before">
+                <td name="td_image" class="text-center align-middle">
+                    <t t-if="line.image">
+                        <img t-att-src="image_data_uri(line.image)" style="max-height:80pt; max-width:80pt;" alt="Product image"/>
+                    </t>
+                </td>
+            </xpath>
+            <xpath expr="//td[@name='td_combo_name']" position="before">
+                <td name="td_combo_image" class="text-center align-middle">
+                    <img t-if="line.image" t-att-src="image_data_uri(line.image)" style="max-height:80pt; max-width:80pt;" alt="Product image"/>
+                </td>
+            </xpath>
+            <xpath expr="//td[@name='td_section_group_name']" position="before">
+                <td name="td_grouped_image"/>
+            </xpath>
+            <xpath expr="//t[@t-set='section_name_colspan'][@t-value!='99']" position="after">
+                <t t-set="section_name_colspan" t-value="section_name_colspan + 1"/>
+            </xpath>
+        </template>
+
+    </data>
+</odoo>
