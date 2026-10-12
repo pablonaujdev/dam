@@ -654,3 +654,73 @@ revisión funcional de GeoNames (sin descargar/importar geografía real durante
 este arreglo), clasificación manual, configuración de agentes y modelo 347.
 Esto no resuelve la fusión general de módulos/grupos OCA pendiente ni certifica
 la migración fiscal completa.
+
+## Auditoría transversal — Cobertura real V17/V19 después de POST-010
+
+Se realizó un cruce completo de los 317 módulos instalados en V17 contra la
+base migrada, fuentes e importación efectiva V19. Se detectaron 15 fuentes OCA
+aún ausentes (todas disponibles oficialmente en 19.0) y `hr_commission_oca`
+disponible sin instalar. El control anterior del presupuesto no acreditaba
+la cobertura de todos los módulos de la base real.
+
+Listado completo, versiones, fuentes oficiales, estados y excepciones:
+[MIAC_AUDITORIA_COMPLETA_MODULOS_V17_V19.md](MIAC_AUDITORIA_COMPLETA_MODULOS_V17_V19.md).
+No se instalaron módulos ni se aplicaron conversiones durante esta auditoría.
+
+## Incorporación de las 15 fuentes OCA pendientes al repositorio
+
+Fecha: 12/10/2026. Alcance solicitado: descargar y colocar los módulos en el
+repositorio. Se incorporaron las quince fuentes oficiales V19 detectadas en
+la auditoría, conservando íntegramente versiones, autoría, licencias y scripts
+upstream. No se ejecutó instalación/actualización de base en este paso.
+
+| Módulo incorporado | Versión oficial | Revisión exacta |
+|---|---|---|
+| `account_banking_mandate` | `19.0.1.0.1` | [OCA/bank-payment](https://github.com/OCA/bank-payment/tree/fdd5d4040b235a4c688b2aec30611d57dd246b64/account_banking_mandate) |
+| `account_banking_pain_base` | `19.0.1.1.1` | [OCA/bank-payment](https://github.com/OCA/bank-payment/tree/fdd5d4040b235a4c688b2aec30611d57dd246b64/account_banking_pain_base) |
+| `account_banking_sepa_credit_transfer` | `19.0.1.0.0` | [OCA/bank-payment](https://github.com/OCA/bank-payment/tree/fdd5d4040b235a4c688b2aec30611d57dd246b64/account_banking_sepa_credit_transfer) |
+| `account_banking_sepa_direct_debit` | `19.0.1.1.1` | [OCA/bank-payment](https://github.com/OCA/bank-payment/tree/fdd5d4040b235a4c688b2aec30611d57dd246b64/account_banking_sepa_direct_debit) |
+| `account_payment_order` | `19.0.1.0.7` | [OCA/bank-payment](https://github.com/OCA/bank-payment/tree/fdd5d4040b235a4c688b2aec30611d57dd246b64/account_payment_order) |
+| `account_financial_report` | `19.0.0.0.26` | [OCA/account-financial-reporting](https://github.com/OCA/account-financial-reporting/tree/0078bc03f234d1caa8b9f40324678ce9dbed2a72/account_financial_report) |
+| `account_move_name_sequence` | `19.0.1.0.3` | [OCA/account-financial-tools](https://github.com/OCA/account-financial-tools/tree/ddcabb93373382148826f97bf9935424d03ddea5/account_move_name_sequence) |
+| `account_statement_base` | `19.0.1.0.1` | [OCA/account-reconcile](https://github.com/OCA/account-reconcile/tree/5402de2e9bb8e2cdd271d28c8d33a24eae3725c4/account_statement_base) |
+| `account_statement_import_base` | `19.0.1.0.0` | [OCA/bank-statement-import](https://github.com/OCA/bank-statement-import/tree/65316c38d7a5586456bc751d8939b84f1cf0bc2e/account_statement_import_base) |
+| `account_statement_import_file` | `19.0.1.0.0` | [OCA/bank-statement-import](https://github.com/OCA/bank-statement-import/tree/65316c38d7a5586456bc751d8939b84f1cf0bc2e/account_statement_import_file) |
+| `l10n_es_account_statement_import_n43` | `19.0.1.0.0` | [OCA/l10n-spain](https://github.com/OCA/l10n-spain/tree/f04d5c17e2e4929ba466bfd73e2628991bef4d4f/l10n_es_account_statement_import_n43) |
+| `l10n_es_aeat_mod111` | `19.0.1.0.0` | [OCA/l10n-spain](https://github.com/OCA/l10n-spain/tree/f04d5c17e2e4929ba466bfd73e2628991bef4d4f/l10n_es_aeat_mod111) |
+| `l10n_es_aeat_mod123` | `19.0.1.0.0` | [OCA/l10n-spain](https://github.com/OCA/l10n-spain/tree/f04d5c17e2e4929ba466bfd73e2628991bef4d4f/l10n_es_aeat_mod123) |
+| `l10n_es_aeat_mod349` | `19.0.1.1.2` | [OCA/l10n-spain](https://github.com/OCA/l10n-spain/tree/f04d5c17e2e4929ba466bfd73e2628991bef4d4f/l10n_es_aeat_mod349) |
+| `l10n_es_toponyms` | `19.0.1.0.1` | [OCA/l10n-spain](https://github.com/OCA/l10n-spain/tree/f04d5c17e2e4929ba466bfd73e2628991bef4d4f/l10n_es_toponyms) |
+
+Se descargaron archivos ZIP de las revisiones fijadas y se extrajeron únicamente
+las quince carpetas de módulos. **781 archivos** comprobados contra los SHA de
+blobs Git de las fuentes oficiales; no se sobrescribieron carpetas existentes.
+
+Validaciones:
+- 184 archivos Python compilados en memoria, sin generar `__pycache__`.
+- 97 XML analizados correctamente.
+- Todos los recursos `data`/`demo` de los manifests existen.
+- Cierre recursivo de 45 dependencias Odoo: cero fuentes ausentes.
+- Python externo requerido: `chardet`, `lxml`, `unidecode`, importaciones
+  verificadas correctamente en `miac_v19_migrada`.
+- Las carpetas están disponibles a través del montaje de solo lectura del repo.
+- No se modificó código upstream ni se incrementaron sus versiones.
+- No se reinició Odoo, no se instalaron/actualizaron módulos en BD, no se
+  convirtieron datos, no se modificó Excel y no se crearon commits.
+
+Evidencias: `logs/oca_15_download_verified.json`,
+`logs/oca_15_static_validation.json`. Archivos ZIP retenidos en
+`restore/oca_download_15` para reproducir las revisiones.
+
+### Estado posterior de los pendientes
+
+La carencia de **fuentes** de los quince módulos queda resuelta. Su actualización
+sobre la base migrada, ejecución de scripts de datos y pruebas de banca,
+extractos, informes, numeración y declaraciones fiscales siguen pendientes.
+No confundir sus filas `installed` heredadas de V17 con una actualización V19.
+
+`hr_commission_oca` ya tenía fuente disponible y continúa pendiente de su
+instalación/correspondencia; no forma parte de los quince descargados.
+Antes de actualizar la base, preparar el respaldo y el orden de dependencias,
+revisar sus migraciones y conservar la neutralización del ensayo. Añadir fuentes
+a un montaje no acredita actualización del esquema ni del registro de Odoo.
