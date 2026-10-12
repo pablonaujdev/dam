@@ -10,6 +10,8 @@
         Conserva precios y descuentos negociados, condiciones de renovación,
         lotes, contactos de entrega, comisiones OCA manuales y por categoría,
         liquidaciones, visitas, adjuntos e históricos manuales.
+        La vista de liquidaciones hereda la extensión de facturas OCA para
+        garantizar la disponibilidad de sus columnas sin depender del orden de vistas.
         Facturación, consolidación y validaciones de renovación nativas de Odoo 19.
         Informes de facturas con costes por compañía, IVA y exportación XLSX/CSV.
         El análisis conserva el detalle de líneas y los filtros Sin precio y Con precio.
@@ -30,7 +32,7 @@
     'author': "JPHA - DAM",
     'website': "https://www.dammad.es",
     'category': 'Sales',
-    'version': '19.0.1.1.0',
+    'version': '19.0.1.1.1',
     'license': 'LGPL-3',
 
     # Módulos requeridos
