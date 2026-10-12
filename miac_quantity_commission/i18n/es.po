@@ -1,0 +1,32 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* miac_quantity_commission
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-01-08 15:25+0000\n"
+"PO-Revision-Date: 2025-01-08 15:25+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: es\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. module: miac_quantity_commission
+#: model:ir.model,name:miac_quantity_commission.model_commission_settlement_line
+msgid "Line of a commission settlement"
+msgstr "Línea de liquidación de una comisión"
+
+#. module: miac_quantity_commission
+#: model:ir.model.fields,field_description:miac_quantity_commission.field_commission_settlement_line__invoiced_quantity
+msgid "Quantity Invoiced"
+msgstr "Cantidad Facturada"
+
+#. module: miac_quantity_commission
+#: model:ir.model.fields,help:miac_quantity_commission.field_commission_settlement_line__invoiced_quantity
+msgid "Shows the quantity of the source invoice line in the commission settlement.\nUses the original quantity, including refunds; without an invoice line it is zero."
+msgstr "Muestra la cantidad de la línea de factura de origen en la liquidación de comisiones.\nConserva la cantidad original, también en rectificativas; sin línea de factura muestra cero."

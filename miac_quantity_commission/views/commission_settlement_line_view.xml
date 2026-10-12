@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+
+    <record id="commission_settlement_invoiced_quantity_view_form_inherit" model="ir.ui.view">
+        <field name="name">commission.settlement.invoiced.quantity.form.inherit</field>
+        <field name="model">commission.settlement</field>
+        <field name="inherit_id" ref="account_commission_oca.view_settlement_form"/>
+        <field name="priority">50</field>
+        <field name="arch" type="xml">
+          <xpath expr="//field[@name='line_ids']/list/field[@name='invoice_line_id']" position="after">
+                <field name="invoiced_quantity" column_invisible="(parent.settlement_type != 'sale_invoice')" groups="account.group_account_invoice"/>
+          </xpath>
+        </field>
+    </record>
+
+</odoo>
