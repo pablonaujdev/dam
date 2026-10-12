@@ -407,3 +407,250 @@ la creación/confirmación de nuevos pedidos ni todas las reglas de tipos. El
 usuario debe recargar la página y repetir la apertura del formulario con su
 sesión y permisos. Continuar registrando nuevas incidencias si aparecen otros
 campos de módulos que todavía no estén disponibles.
+
+## POST-008 — Contactos: zip_id sin definición
+
+Error del navegador el 12/10/2026 a las 16:28:14 UTC:
+`"res.partner"."zip_id" field is undefined`.
+La base conserva instalado `base_location` V17 y sus vistas, pero faltaba el
+código en el repositorio. Se comprobó primero disponibilidad oficial OCA V19.
+
+Se incorporan sin cambios de código, autoría, licencia o versiones oficiales:
+- `base_location`: **19.0.1.0.1**, 95 archivos.
+- `base_location_geonames_import`: **19.0.1.0.0**, 91 archivos; también constaba
+  instalado en V17 y se conserva su funcionalidad. No se ejecuta su importador.
+
+Fuente: [OCA/partner-contact](https://github.com/OCA/partner-contact/tree/b22f62266ad1bf80192bd046293a3f3c27a73625).
+Revisión fija: `b22f62266ad1bf80192bd046293a3f3c27a73625`.
+Dependencias nativas `base_address_extended` y `contacts`, disponibles.
+No contienen scripts propios de migración en esta revisión.
+
+Respaldo: `restore/before_post_008.dump`. Web detenido durante actualización:
+
+```powershell
+$miacCompose = 'C:\Proyectos FL\DAM\miac_v19_migrada\compose.yaml'
+docker compose -f $miacCompose stop web
+# Realizar respaldo de la base y conservar el filestore antes de continuar.
+docker compose -f $miacCompose run --rm --no-deps --entrypoint python3 web /usr/bin/odoo -c /etc/odoo/miac.conf -d miac_v19_migrada -u base_location,base_location_geonames_import --stop-after-init --no-http --max-cron-threads=0
+docker compose -f $miacCompose up -d web
+```
+
+Resultado: código 0. Huellas de direcciones de **13.327 contactos**, incluyendo
+archivados, idénticas antes/después (`zip_id`, `city_id`, código postal, ciudad,
+país, provincia, calle y segunda línea). Tres contactos tienen ZIP vinculado.
+El catálogo existente contiene una ciudad y un código postal; sus filas e IDs
+se conservaron íntegramente, sin añadir datos geográficos. Evidencias:
+`logs/post_008_before.json`, `post_008_after.json`, `update_base_location.log`.
+
+La primera auditoría completa mostró otros cuatro campos no cargados; se
+resuelven en POST-009/010, sin considerar suficiente la mera compilación XML.
+Para revertir, restaurar el respaldo y sus fuentes en una base aislada;
+retirar código dejando sus vistas en la base vuelve a provocar el error.
+
+## POST-009 — Otros campos ausentes en Contactos y vista antigua duplicada
+
+La arquitectura del formulario contenía `is_customer`, `is_supplier`,
+`not_in_mod347` y `agent_ids` sin metadatos Python. Diagnóstico confirmado:
+- `partner_manual_rank` instalado V17, sin código disponible.
+- `l10n_es_aeat_mod347` pendiente de actualizar V17, sin código disponible.
+- `commission.view_partner_form_agent` seguía activa aunque ya existe su
+  equivalente V19 `commission_oca.view_partner_form_agent`.
+
+Se añaden módulos oficiales, sin modificaciones:
+- `partner_manual_rank`: **19.0.1.0.0**, revisión `b22f62266ad1bf80192bd046293a3f3c27a73625` de [OCA/partner-contact](https://github.com/OCA/partner-contact/tree/b22f62266ad1bf80192bd046293a3f3c27a73625/partner_manual_rank).
+- `l10n_es_aeat_mod347`: **19.0.1.0.3**, revisión `f04d5c17e2e4929ba466bfd73e2628991bef4d4f` de [OCA/l10n-spain](https://github.com/OCA/l10n-spain/tree/f04d5c17e2e4929ba466bfd73e2628991bef4d4f/l10n_es_aeat_mod347).
+
+Sus dependencias ya están disponibles en el ensayo. No se generan informes
+347, no se importan datos y no se recalculan declaraciones por esta intervención.
+
+Respaldo antes de estos cambios: `restore/before_post_009.dump`.
+Se retira únicamente la vista antigua de agentes (ID 3605 en este ensayo),
+conservando su registro/XML ID, y se utiliza su equivalente vigente activa
+(ID 7421). No se desinstalan módulos ni se modifica la relación de agentes.
+Ambas versiones utilizan `partner_agent_rel(partner_id, agent_id)`.
+No se cambian membresías de grupos; su correspondencia histórica OCA sigue
+pendiente de revisión específica de permisos y namespaces.
+
+Script idempotente, condicionado a que exista la vista V19 equivalente y
+el campo vigente, reproducido íntegramente:
+
+```sql
+-- Ensayo V19: retirar solo la vista V17 duplicada, conservando todos sus registros.
+\set ON_ERROR_STOP on
+BEGIN;
+SET LOCAL lock_timeout = '10s';
+DO $miac$
+DECLARE old_view integer; new_view integer;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM ir_module_module WHERE name = 'base'
+                   AND latest_version LIKE '19.%' AND state = 'installed') THEN
+        RAISE EXCEPTION 'Este ajuste exige la copia migrada V19';
+    END IF;
+    SELECT v.id INTO old_view FROM ir_ui_view v JOIN ir_model_data d
+      ON d.model = 'ir.ui.view' AND d.res_id = v.id
+    WHERE d.module = 'commission' AND d.name = 'view_partner_form_agent'
+      AND v.model = 'res.partner' FOR UPDATE OF v;
+    SELECT v.id INTO new_view FROM ir_ui_view v JOIN ir_model_data d
+      ON d.model = 'ir.ui.view' AND d.res_id = v.id
+    WHERE d.module = 'commission_oca' AND d.name = 'view_partner_form_agent'
+      AND v.model = 'res.partner' AND v.active
+      AND v.arch_db::text LIKE '%commission_agent_ids%';
+    IF old_view IS NULL OR new_view IS NULL OR old_view = new_view THEN
+        RAISE EXCEPTION 'No existe el par de vistas V17/V19 esperado; no se modifica nada';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM ir_model_fields WHERE model = 'res.partner'
+                   AND name = 'commission_agent_ids') THEN
+        RAISE EXCEPTION 'No existe el campo actual de agentes';
+    END IF;
+    IF EXISTS (SELECT 1 FROM ir_ui_view WHERE id = old_view AND active) THEN
+        UPDATE ir_ui_view SET active = false WHERE id = old_view;
+        RAISE NOTICE 'Vista V17 % retirada; vista V19 % conservada', old_view, new_view;
+    ELSE
+        RAISE NOTICE 'La vista V17 ya esta inactiva; no hay cambios';
+    END IF;
+END;
+$miac$;
+COMMIT;
+```
+
+La actualización de `partner_manual_rank,l10n_es_aeat_mod347` detectó POST-010;
+`InFailedSqlTransaction` no debe tratarse como causa independiente. Se conserva
+el primer log en `logs/update_partner_manual_rank_mod347.log`.
+La retirada de la vista se ejecutó dos veces: la segunda no introdujo cambios.
+
+**Reversión acotada de la vista:** con web detenido, verificar el XML ID y
+reactivar únicamente `commission.view_partner_form_agent` mediante un
+`UPDATE ir_ui_view SET active=true` unido a ese XML ID. Reintroduce el campo
+obsoleto si no se restaura también el código V17; no usarlo como reparación
+sobre el entorno V19 actual. Para revertir todo, restaurar el respaldo.
+
+## POST-010 — Exclusión 347 por compañía y referencia Studio de agentes
+
+### Conversión de exclusión fiscal
+
+Error de actualización: `cannot cast type boolean to jsonb` al convertir
+`res_partner.not_in_mod347`. El origen tiene un booleano compartido; el código
+OCA V19 lo declara `company_dependent=True` y Odoo almacena JSON por compañía.
+La conversión automática por cast no expresa esa correspondencia.
+
+Se conserva cada booleano previo bajo la clave de **cada compañía existente**,
+incluidas archivadas; los valores NULL continúan NULL. En esta copia hay una
+compañía. No se ponen todos los contactos a false ni se decide según la compañía
+del contacto: el indicador anterior era compartido. El default SQL booleano
+se retira antes de cambiar el tipo; Odoo administra el default del campo V19.
+
+Una compañía que se cree posteriormente debe revisar sus exclusiones fiscales;
+no existía en el momento de la conversión y no tiene una clave de este mapa.
+La conversión se aplica al origen actualizado de este ensayo, no a V17 ni a
+producción sin revisión y autorización del procedimiento correspondiente.
+
+### Personalización Studio conservada
+
+La lista Studio `studio_customization.odoo_studio_res_part_ba3d9bec-174c-46a2-92cf-944a3362972b`
+(ID 4077) todavía insertaba `<field name="agent_ids"/>`. Se conserva la vista,
+sus opciones, otras columnas y traducciones, sustituyendo únicamente ese
+atributo por `commission_agent_ids`. No se desactiva la personalización Studio.
+
+Script transaccional e idempotente (requiere el XML ID exacto de esta base;
+si difiere en otra copia, revisar y adaptar, no ejecutar a ciegas):
+
+```sql
+-- Solo en la copia V19, con respaldo previo y el web detenido.
+\set ON_ERROR_STOP on
+BEGIN;
+SET LOCAL lock_timeout = '10s';
+SET LOCAL statement_timeout = '120s';
+DO $miac$
+DECLARE column_type text; company_args text; studio_view integer;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM ir_module_module WHERE name = 'base'
+                   AND latest_version LIKE '19.%' AND state = 'installed') THEN
+        RAISE EXCEPTION 'Este ajuste exige la copia migrada V19';
+    END IF;
+    SELECT data_type INTO column_type FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'res_partner'
+      AND column_name = 'not_in_mod347';
+    IF column_type = 'boolean' THEN
+        LOCK TABLE res_company IN SHARE MODE;
+        LOCK TABLE res_partner IN ACCESS EXCLUSIVE MODE;
+        SELECT string_agg(format('%L, not_in_mod347', id::text), ', ' ORDER BY id)
+          INTO company_args FROM res_company;
+        IF company_args IS NULL THEN RAISE EXCEPTION 'No existen companias'; END IF;
+        ALTER TABLE res_partner ALTER COLUMN not_in_mod347 DROP DEFAULT;
+        EXECUTE format('ALTER TABLE res_partner ALTER COLUMN not_in_mod347 TYPE jsonb
+          USING CASE WHEN not_in_mod347 IS NULL THEN NULL
+          ELSE jsonb_build_object(%s) END', company_args);
+        RAISE NOTICE 'Indicador compartido conservado por cada compania actual';
+    ELSIF column_type = 'jsonb' THEN
+        RAISE NOTICE 'Indicador ya convertido; no se modifica';
+    ELSE
+        RAISE EXCEPTION 'Tipo de columna inesperado: %', column_type;
+    END IF;
+    SELECT v.id INTO studio_view FROM ir_ui_view v JOIN ir_model_data d
+      ON d.model = 'ir.ui.view' AND d.res_id = v.id
+    WHERE d.module = 'studio_customization'
+      AND d.name = 'odoo_studio_res_part_ba3d9bec-174c-46a2-92cf-944a3362972b'
+      AND v.model = 'res.partner' AND v.type = 'list' FOR UPDATE OF v;
+    IF studio_view IS NULL THEN
+        RAISE EXCEPTION 'No existe la vista Studio esperada; revisar antes de continuar';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM ir_model_fields WHERE model = 'res.partner'
+                   AND name = 'commission_agent_ids') THEN
+        RAISE EXCEPTION 'No existe el campo vigente de agentes';
+    END IF;
+    UPDATE ir_ui_view v SET arch_db = (
+        SELECT jsonb_object_agg(lang, replace(xml, 'name="agent_ids"', 'name="commission_agent_ids"'))
+        FROM jsonb_each_text(v.arch_db) AS arch(lang, xml)
+    ) WHERE v.id = studio_view AND EXISTS (
+        SELECT 1 FROM jsonb_each_text(v.arch_db) AS arch(lang, xml)
+        WHERE strpos(xml, 'name="agent_ids"') > 0
+    );
+END;
+$miac$;
+COMMIT;
+```
+
+La segunda ejecución no vuelve a convertir valores ni a modificar referencias.
+Ambos scripts están también en `scripts/migration/post_009_*.sql` y
+`scripts/migration/post_010_*.sql` para ejecución con `psql -X -v ON_ERROR_STOP=1`.
+
+Después de ejecutarlos con web detenido y respaldo previo:
+
+```powershell
+docker compose -f 'C:\Proyectos FL\DAM\miac_v19_migrada\compose.yaml' run --rm --no-deps --entrypoint python3 web /usr/bin/odoo -c /etc/odoo/miac.conf -d miac_v19_migrada -u partner_manual_rank,l10n_es_aeat_mod347 --stop-after-init --no-http --max-cron-threads=0
+docker compose -f 'C:\Proyectos FL\DAM\miac_v19_migrada\compose.yaml' up -d web
+```
+
+Resultado: código 0; log `logs/update_contacts_after_flag_conversion.log`.
+
+### Reversión y comprobaciones
+
+La reversión segura es restaurar `before_post_009.dump` en un destino aislado
+junto con el código y filestore correspondientes. No convertir JSON a booleano
+sin comprobar primero que todas las compañías conservan el mismo valor: si
+se han editado exclusiones independientes después, esa reversión perdería
+su significado. El JSON nuevo queda respaldado en
+`logs/post_010_after_flags.json`, y los valores originales en
+`logs/post_010_before_flags.json`.
+
+Validaciones del ensayo:
+- Los 13.327 indicadores originales se compararon uno por uno con el valor
+  resultante de cada compañía existente: coinciden, incluidos NULL.
+- Huella de `customer_rank` y `supplier_rank` conservada.
+- **1.184 vínculos de agentes** conservados; huella de toda la relación idéntica.
+- Once vistas principales de Contactos (formulario, lista, kanban, búsqueda),
+  incluidas sub-vistas relacionales: ningún campo usado en el XML falta en
+  Python o en los metadatos de `get_views()` enviados al navegador.
+- La lista Studio conserva su columna de agentes con el nombre vigente.
+- Las sesiones ORM de auditoría terminaron con rollback; no se crearon ni
+  editaron contactos funcionales ni se generaron declaraciones fiscales.
+- Logs: `post_009_view_retirement_*.log`, `post_010_apply_*.log`,
+  `post_010_final_view_audit.log`; snapshot de agentes en `post_009_before.json`.
+- Se preservan versiones, autoría y licencias oficiales de los cuatro addons
+  incorporados. No se modifican manifests de otros módulos, Excel ni commits.
+
+Pendiente: apertura visual con la sesión real del usuario y sus permisos;
+revisión funcional de GeoNames (sin descargar/importar geografía real durante
+este arreglo), clasificación manual, configuración de agentes y modelo 347.
+Esto no resuelve la fusión general de módulos/grupos OCA pendiente ni certifica
+la migración fiscal completa.
