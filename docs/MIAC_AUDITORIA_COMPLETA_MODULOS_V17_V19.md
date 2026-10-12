@@ -495,3 +495,24 @@ excepción dinámica documentada. «Estado BD» es el del destino tras correspon
 | `web_tour` | Odoo estándar | `17.0.0.1` | `web_tour` | installed / `19.0.1.0` | `1.0` | sí | ESTANDAR CARGADO |
 | `web_tree_many2one_clickable` | OCA | `17.0.1.0.0` | `web_tree_many2one_clickable` | installed / `19.0.1.0.0` | `19.0.1.0.0` | sí | FUENTE V19, INSTALADO Y CARGADO |
 | `web_unsplash` | Odoo estándar | `17.0.1.1` | `web_unsplash` | installed / `19.0.1.1` | `1.1` | sí | ESTANDAR CARGADO |
+
+## Revalidación después de incorporar las fuentes OCA
+
+12/10/2026: se volvió a consultar la base V17 en directo; sus **317 módulos
+instalados** coinciden con la auditoría completa anterior. Se contrastaron sus
+destinos con las carpetas actuales y los estados/versiones reales de V19:
+
+- **Cero fuentes V19 ausentes** entre los addons de origen que se conservarán.
+- Cierre recursivo de **130 módulos/dependencias**, sin fuentes ausentes.
+- Los 15 módulos recién incorporados continúan con versión V17 en la base:
+  requieren actualización; la copia de archivos no ejecutó sus migraciones.
+- `hr_commission_oca` está disponible en el repo, versión `19.0.1.0.0`, pero
+  sigue `uninstalled`: requiere instalación y correspondencia con HR antiguo.
+- Permanecen revisiones de namespaces, sustituciones/exclusiones y tema web,
+  detalladas en la auditoría. No se convierten en descargas nuevas por este control.
+- No se carga un registro nuevo con estos addons sin actualizar primero el
+  esquema: incorporar código y tener filas installed no prueba funcionamiento.
+- No se instaló/actualizó ningún addon ni se modificaron datos o Excel. PostgreSQL
+  V17 se volvió a detener después de la lectura, conservando su estado inicial.
+
+Evidencia: `C:\Proyectos FL\DAM\miac_v19_migrada\logs\inventory_after_oca_download.json`.

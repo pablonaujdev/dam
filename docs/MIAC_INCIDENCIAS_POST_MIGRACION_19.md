@@ -724,3 +724,24 @@ instalación/correspondencia; no forma parte de los quince descargados.
 Antes de actualizar la base, preparar el respaldo y el orden de dependencias,
 revisar sus migraciones y conservar la neutralización del ensayo. Añadir fuentes
 a un montaje no acredita actualización del esquema ni del registro de Odoo.
+
+## Revalidación después de incorporar las fuentes OCA
+
+12/10/2026: se volvió a consultar la base V17 en directo; sus **317 módulos
+instalados** coinciden con la auditoría completa anterior. Se contrastaron sus
+destinos con las carpetas actuales y los estados/versiones reales de V19:
+
+- **Cero fuentes V19 ausentes** entre los addons de origen que se conservarán.
+- Cierre recursivo de **130 módulos/dependencias**, sin fuentes ausentes.
+- Los 15 módulos recién incorporados continúan con versión V17 en la base:
+  requieren actualización; la copia de archivos no ejecutó sus migraciones.
+- `hr_commission_oca` está disponible en el repo, versión `19.0.1.0.0`, pero
+  sigue `uninstalled`: requiere instalación y correspondencia con HR antiguo.
+- Permanecen revisiones de namespaces, sustituciones/exclusiones y tema web,
+  detalladas en la auditoría. No se convierten en descargas nuevas por este control.
+- No se carga un registro nuevo con estos addons sin actualizar primero el
+  esquema: incorporar código y tener filas installed no prueba funcionamiento.
+- No se instaló/actualizó ningún addon ni se modificaron datos o Excel. PostgreSQL
+  V17 se volvió a detener después de la lectura, conservando su estado inicial.
+
+Evidencia: `C:\Proyectos FL\DAM\miac_v19_migrada\logs\inventory_after_oca_download.json`.
