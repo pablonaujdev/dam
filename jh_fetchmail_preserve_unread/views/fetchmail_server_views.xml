@@ -1,0 +1,26 @@
+<odoo>
+    <record id="jh_fetchmail_server_preserve_form" model="ir.ui.view">
+        <field name="name">fetchmail.server.jh.preserve.form</field>
+        <field name="model">fetchmail.server</field>
+        <field name="inherit_id" ref="mail.view_email_server_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page name="jh_read_status" string="Preserve read status" groups="base.group_system">
+                    <group>
+                        <field name="jh_preserve_unread" readonly="jh_uidvalidity"/>
+                        <field name="jh_uidvalidity"/>
+                        <field name="jh_last_uid"/>
+                        <field name="jh_failed_count"/>
+                        <field name="jh_collection_error"/>
+                    </group>
+                    <div class="alert alert-warning" invisible="not jh_preserve_unread or jh_uidvalidity">
+                        Collection is stopped until you set the starting point. Existing messages,
+                        including unread messages, will not be imported. Reconcile pending mail first.
+                    </div>
+                    <button name="action_jh_initialize" type="object" string="Set starting point" class="btn-primary" invisible="not jh_preserve_unread or jh_uidvalidity or state != 'done'" confirm="All messages currently in INBOX will be excluded. Have pending messages been reconciled?"/>
+                    <button name="%(jh_fetchmail_receipt_action)d" type="action" string="Collection receipts" invisible="not jh_uidvalidity"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
