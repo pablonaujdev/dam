@@ -1,9 +1,12 @@
 import hashlib
 import logging
+from email import policy
+from email.parser import BytesHeaderParser
 from datetime import timedelta
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools.mail import decode_message_header, email_normalize, unfold_references
 
 from ..imap_inbox import ImapInbox
 
@@ -17,6 +20,9 @@ class FetchmailServer(models.Model):
     _inherit = 'fetchmail.server'
 
     jh_preserve_unread = fields.Boolean(string='Preserve mailbox read status', default=False, help='Collects new IMAP messages without changing their read status.\nRequires an explicit starting point and does not import earlier messages.')
+    jh_replies_only = fields.Boolean(string='Only replies to Odoo documents', default=False, help='Imports only messages referencing an existing Odoo document conversation.\nUnrelated messages are recorded as skipped without creating records or sending bounces.')
+    jh_reply_user_id = fields.Many2one('res.users', string='Mailbox user', domain=[('share', '=', False)], copy=False, help='Identifies the internal user whose email address receives replies in this mailbox.\nThe user email must match the IMAP login; authorize this account before enabling personal replies.')
+    jh_reply_to_sender = fields.Boolean(string='Receive replies at sender address', default=False, copy=False, help='Uses this user email as Reply-To for document messages sent from that address.\nRequires an active confirmed collector, read preservation, replies-only mode and a starting point.')
     jh_uidvalidity = fields.Char(string='IMAP folder generation', readonly=True, copy=False, help='Stores the INBOX generation accepted at the starting point.\nCollection stops if the IMAP server reports a different UIDVALIDITY.')
     jh_last_uid = fields.Char(string='Last scanned UID', readonly=True, copy=False, help='Stores the last message UID recorded by this collector.\nFailed messages are retried separately without scanning processed UIDs again.')
     jh_mailbox_signature = fields.Char(string='Mailbox identity', readonly=True, copy=False, help='Identifies the connection settings accepted at the starting point.\nChanging the server or account requires reconciliation before collecting.')
@@ -38,6 +44,31 @@ class FetchmailServer(models.Model):
         for server in self:
             if server.jh_preserve_unread and server._get_connection_type() != 'imap':
                 raise ValidationError(_('Preserving read status requires an IMAP server.'))
+
+    @api.constrains('jh_replies_only', 'jh_preserve_unread', 'jh_reply_to_sender', 'jh_reply_user_id', 'user', 'active', 'state', 'jh_uidvalidity')
+    def _jh_check_personal_replies(self):
+        for server in self:
+            if server.jh_replies_only and not server.jh_preserve_unread:
+                raise ValidationError(_('Replies-only collection requires read preservation.'))
+            if server.jh_reply_to_sender and not server._jh_personal_reply_address():
+                raise ValidationError(_(
+                    'Initialize an active confirmed replies-only collector first, and select an '
+                    'active internal user whose email matches the IMAP login, before enabling personal replies. '
+                    'Disable personal replies before archiving or resetting this server.'))
+
+    def _jh_personal_reply_address(self):
+        self.ensure_one()
+        user = self.jh_reply_user_id
+        if not (self.active and self.state == 'done' and self.jh_preserve_unread
+                and self.jh_replies_only and self.jh_uidvalidity and user.active and not user.share):
+            return False
+        address = email_normalize(user.email or '')
+        return address if address and address == email_normalize(self.user or '') else False
+
+    @api.model
+    def _jh_reply_addresses(self):
+        servers = self.sudo().search([('jh_reply_to_sender', '=', True)])
+        return {address for server in servers if (address := server._jh_personal_reply_address())}
 
     def write(self, values):
         protected = {'server', 'port', 'user', 'server_type', 'is_ssl', 'jh_preserve_unread'}
@@ -123,7 +154,7 @@ class FetchmailServer(models.Model):
             receipt = Receipt.search([
                 ('jh_server_id', '=', self.id), ('jh_folder', '=', inbox.folder),
                 ('jh_uidvalidity', '=', str(generation)), ('jh_uid', '=', str(uid))], limit=1)
-        if receipt and receipt.jh_state in ('done', 'missing'):
+        if receipt and receipt.jh_state in ('done', 'missing', 'skipped', 'duplicate'):
             return
         if not receipt:
             receipt = Receipt.create({
@@ -138,15 +169,59 @@ class FetchmailServer(models.Model):
         try:
             # Roll back both the business records and success receipt on any failure.
             with self.env.cr.savepoint():
-                self.env['mail.thread'].with_context(
+                headers = BytesHeaderParser(policy=policy.SMTP).parsebytes(raw_message)
+                message_id = str(headers.get('Message-Id') or '').strip()
+                Message = self.env['mail.message'].sudo()
+                if message_id and Message.search_count([('message_id', '=', message_id)]):
+                    receipt.write({'jh_state': 'duplicate', 'jh_attempts': attempts,
+                                   'jh_error': False, 'jh_next_attempt': False})
+                    return
+                parent = Message.browse()
+                if self.jh_replies_only:
+                    references = decode_message_header(headers, 'References') or decode_message_header(headers, 'In-Reply-To')
+                    reference_ids = [ref.strip() for ref in unfold_references(references) if 'reply_to' not in ref]
+                    parent = Message.search([('message_id', 'in', reference_ids)], order='id desc, message_id', limit=1)
+                    if not parent or not parent.model or not parent.res_id:
+                        receipt.write({'jh_state': 'skipped', 'jh_attempts': attempts,
+                                       'jh_error': False, 'jh_next_attempt': False})
+                        return
+                    if parent.model not in self.env or not self.env[parent.model].browse(parent.res_id).exists():
+                        raise UserError(_('The referenced Odoo document no longer exists.'))
+                    if not message_id:
+                        raise UserError(_('The reply has no Message-ID; automatic deduplication is not possible.'))
+                # A unique claim serializes copies delivered to different mailboxes,
+                # including workers using PostgreSQL repeatable-read snapshots.
+                # It commits together with the imported message, or rolls back with it.
+                if message_id:
+                    receipt.write({'jh_message_key': hashlib.sha256(message_id.encode()).hexdigest()})
+                    receipt.flush_recordset(['jh_message_key'])
+                context = dict(
                     fetchmail_cron_running=True, default_fetchmail_server_id=self.id,
                     mail_notify_force_send=False,
-                ).message_process(
+                    jh_reply_parent_id=parent.id if parent else False,
+                )
+                # Office may collect a CC before the personal mailbox does.
+                # Apply notification suppression there too when personal replies
+                # are enabled, otherwise the user receives the original twice.
+                if self.jh_replies_only or self._jh_reply_addresses():
+                    context['jh_original_recipients'] = ','.join(filter(None, [
+                        decode_message_header(headers, 'To'), decode_message_header(headers, 'Cc'),
+                        self._jh_personal_reply_address(),
+                    ]))
+                self.env['mail.thread'].with_context(**context).message_process(
                     self.object_id.model, raw_message, save_original=self.original,
                     strip_attachments=not self.attach)
+                if self.jh_replies_only and not Message.search_count([('message_id', '=', message_id)]):
+                    raise UserError(_('Odoo did not import this reply; review its routing or loop protection.'))
                 receipt.write({'jh_state': 'done', 'jh_attempts': attempts,
                                'jh_error': False, 'jh_next_attempt': False})
         except Exception as error:
+            if (getattr(error, 'pgcode', None) == '23505'
+                    and getattr(getattr(error, 'diag', None), 'constraint_name', None)
+                    == 'jh_fetchmail_receipt_jh_fetchmail_message_unique'):
+                receipt.write({'jh_state': 'duplicate', 'jh_attempts': attempts,
+                               'jh_error': False, 'jh_next_attempt': False})
+                return
             receipt.write({
                 'jh_state': 'failed', 'jh_attempts': attempts,
                 'jh_next_attempt': fields.Datetime.now() + timedelta(minutes=15),

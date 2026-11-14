@@ -9,6 +9,7 @@
                 <field name="jh_uidvalidity"/>
                 <field name="jh_uid"/>
                 <field name="jh_state"/>
+                <field name="jh_message_key" optional="hide"/>
                 <field name="jh_attempts"/>
                 <field name="jh_next_attempt"/>
                 <field name="jh_error" optional="show"/>

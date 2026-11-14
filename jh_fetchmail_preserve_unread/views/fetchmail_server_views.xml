@@ -8,12 +8,20 @@
                 <page name="jh_read_status" string="Preserve read status" groups="base.group_system">
                     <group>
                         <field name="jh_preserve_unread" readonly="jh_uidvalidity"/>
+                        <field name="jh_replies_only" invisible="not jh_preserve_unread"/>
+                        <field name="jh_reply_user_id" invisible="not jh_replies_only"/>
+                        <field name="jh_reply_to_sender" invisible="not jh_replies_only"/>
                         <field name="jh_uidvalidity"/>
                         <field name="jh_last_uid"/>
                         <field name="jh_failed_count"/>
                         <field name="jh_collection_error"/>
                     </group>
-                    <div class="alert alert-warning" invisible="not jh_preserve_unread or jh_uidvalidity">
+                    <div class="alert alert-info" role="status" invisible="not jh_replies_only">
+                        Initialize and authorize this mailbox before enabling personal replies.
+                        Unrelated emails are skipped. Existing conversations sent to the office
+                        mailbox must continue to be collected there.
+                    </div>
+                    <div class="alert alert-warning" role="alert" invisible="not jh_preserve_unread or jh_uidvalidity">
                         Collection is stopped until you set the starting point. Existing messages,
                         including unread messages, will not be imported. Reconcile pending mail first.
                     </div>

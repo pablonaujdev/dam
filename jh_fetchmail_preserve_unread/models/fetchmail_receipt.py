@@ -12,7 +12,8 @@ class JhFetchmailReceipt(models.Model):
     jh_folder = fields.Char(string='Folder', required=True, default='INBOX', help='Identifies the IMAP folder associated with the message UID.\nThis implementation collects only INBOX.')
     jh_uidvalidity = fields.Char(string='UIDVALIDITY', required=True, help='Identifies the generation of the IMAP folder.\nA changed value requires reconciliation before collecting again.')
     jh_uid = fields.Char(string='IMAP UID', required=True, help='Identifies this message within its IMAP folder generation.\nStored as text to support unsigned 32-bit IMAP identifiers.')
-    jh_state = fields.Selection([('pending', 'Pending'), ('done', 'Processed'), ('failed', 'Failed'), ('missing', 'Removed from mailbox')], string='Result', required=True, default='pending', index=True, help='Records whether this UID was imported or needs another attempt.\nOptions: pending (Pending), done (Processed), failed (Failed), missing (Removed from mailbox).')
+    jh_state = fields.Selection([('pending', 'Pending'), ('done', 'Processed'), ('failed', 'Failed'), ('missing', 'Removed from mailbox'), ('skipped', 'Unrelated message'), ('duplicate', 'Already imported')], string='Result', required=True, default='pending', index=True, help='Records whether this UID was imported, excluded or needs another attempt.\nOptions: pending (Pending), done (Processed), failed (Failed), missing (Removed), skipped (Unrelated), duplicate (Already imported).')
+    jh_message_key = fields.Char(string='Imported message fingerprint', readonly=True, copy=False, help='Stores a SHA-256 fingerprint of the Message-ID claimed by this import.\nA unique database constraint prevents concurrent imports of copies received in different mailboxes.')
     jh_attempts = fields.Integer(string='Attempts', default=0, help='Counts collection attempts since creation or the last manual retry.\nAutomatic collection stops after three unsuccessful attempts.')
     jh_next_attempt = fields.Datetime(string='Next attempt', index=True, help='Indicates when an unsuccessful message can be retried.\nAutomatic retries wait fifteen minutes between attempts.')
     jh_error = fields.Text(string='Last error', help='Explains the latest processing failure for administrator review.\nThe message body and attachments are not stored in this receipt.')
@@ -20,6 +21,8 @@ class JhFetchmailReceipt(models.Model):
     _sql_constraints = [
         ('jh_fetchmail_uid_unique', 'unique(jh_server_id, jh_folder, jh_uidvalidity, jh_uid)',
          'This IMAP message already has a collection receipt.'),
+        ('jh_fetchmail_message_unique', 'unique(jh_message_key)',
+         'This message has already been claimed by another mailbox import.'),
     ]
 
     def action_jh_retry(self):
